@@ -1,12 +1,14 @@
 package com.whatsappbot.whatsappservice.service;
 
-import com.lowagie.text.*;
-import com.lowagie.text.pdf.PdfWriter;
-import com.whatsappbot.whatsappservice.model.PedidoEntity;
-import org.springframework.stereotype.Service;
-
 import java.io.File;
 import java.io.FileOutputStream;
+
+import org.springframework.stereotype.Service;
+
+import com.itextpdf.text.Document;
+import com.itextpdf.text.Paragraph;
+import com.itextpdf.text.pdf.PdfWriter;
+import com.whatsappbot.whatsappservice.model.PedidoEntity;
 
 @Service
 public class ComandaService {
