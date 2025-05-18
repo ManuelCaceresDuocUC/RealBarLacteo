@@ -102,7 +102,7 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
                          + "🆔 ID: " + pedido.getPedidoId() + "\n"
                          + "📞 Teléfono: " + pedido.getTelefono() + "\n"
                          + "📦 Detalle: " + pedido.getDetalle();
-            watiService.enviarMensaje("56966798353", aviso); // número del local
+            watiService.enviarMensaje("56952358357", aviso); // nuevo número del local
 
             return ResponseEntity.ok("Pago confirmado, comanda generada y aviso enviado.");
         } else {
