@@ -18,7 +18,7 @@ import okhttp3.Response;
 public class WatiService {
 
     // Usa esta URL si estás en modo simulación (sandbox).
-    private final String WATI_URL = "https://app.wati.io/whatsapp/sendMessage";
+private final String WATI_URL = "https://live-server.wati.io/api/v1/sendSessionMessage";
 
     // Token desde Render o entorno local
     private final String API_KEY = System.getenv("WATI_API_KEY");
