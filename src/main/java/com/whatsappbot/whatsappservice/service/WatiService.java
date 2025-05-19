@@ -19,7 +19,7 @@ import okhttp3.Response;
 @Service
 public class WatiService {
 
-    private final String WATI_URL = "https://live-server.wati.io/api/v1/sendTemplateMessage";
+    private final String WATI_URL = System.getenv("WATI_API_URL");
     private final String API_KEY = System.getenv("WATI_API_KEY");
 
     public void enviarMensaje(String telefono, String mensajeConLink) throws IOException {
