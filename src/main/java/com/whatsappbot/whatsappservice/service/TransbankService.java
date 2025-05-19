@@ -44,9 +44,11 @@ public class TransbankService {
                 .post(body)
                 .build();
 
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IOException("Error al crear transacción");
-            JsonNode node = mapper.readTree(response.body().string());
+                    try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                String errorBody = response.body() != null ? response.body().string() : "sin respuesta";
+                throw new IOException("Error al crear transacción. Código: " + response.code() + " - " + errorBody);
+            }            JsonNode node = mapper.readTree(response.body().string());
             return "https://webpay3g.transbank.cl/webpayserver/initTransaction?token=" + node.get("token").asText();
         }
     }
