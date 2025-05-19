@@ -30,7 +30,7 @@ public class TransbankService {
         payload.put("buy_order", buyOrder);
         payload.put("session_id", UUID.randomUUID().toString());
         payload.put("amount", amount);
-        payload.put("return_url", "https://realbarlacteo.onrender.com/webpay/confirmacion");
+        payload.put("return_url", "https://realbarlacteo-1.onrender.com/api/pedidos/confirmacion");
 
         ObjectMapper mapper = new ObjectMapper();
         String json = mapper.writeValueAsString(payload);

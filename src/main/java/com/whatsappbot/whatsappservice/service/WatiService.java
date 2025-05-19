@@ -38,8 +38,10 @@ public class WatiService {
                 .build();
 
         Response response = client.newCall(request).execute();
-        if (!response.isSuccessful()) {
-            throw new IOException("Error al enviar mensaje WATI: " + response);
-        }
+if (!response.isSuccessful()) {
+    throw new IOException("Error al enviar mensaje WATI: " + response);
+} else {
+    System.out.println("✅ Mensaje enviado por WhatsApp: " + response.code());
+}
     }
 }

@@ -1,6 +1,5 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,10 +20,12 @@ import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/pedidos")
 @RequiredArgsConstructor
@@ -38,36 +39,60 @@ public class PedidoControlador {
 
     // ✅ Método para crear pedido y enviar link de pago por WhatsApp
     @PostMapping
-    public ResponseEntity<?> crearPedido(@RequestBody PedidoEntity pedido) {
+    public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
+        String telefono = payload.get("telefono");
+        String detalle = payload.get("detalle");
+        String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+
+        log.info("📝 Recibido nuevo pedido: telefono={}, detalle={}", telefono, detalle);
+
         try {
-            // Generar un ID único si no se envió
-            if (pedido.getPedidoId() == null || pedido.getPedidoId().isEmpty()) {
-                pedido.setPedidoId("pedido-" + UUID.randomUUID().toString().substring(0, 8));
+            PedidoEntity pedido = new PedidoEntity(pedidoId, telefono, detalle);
+            pedidoRepository.save(pedido);
+            log.info("✅ Pedido guardado con ID: {}", pedidoId);
+
+            // 1. Crear transacción en Transbank
+            String link = "";
+            try {
+                link = transbankService.generarLinkDePago(pedidoId, 1000); // puedes cambiar el monto
+                log.info("✅ Link de pago generado: {}", link);
+            } catch (Exception e) {
+                log.error("❌ Error al generar link de Transbank", e);
+                return ResponseEntity.status(500).body(Map.of(
+                    "detalle", "Error al crear transacción",
+                    "error", "Fallo al generar el link de pago"
+                ));
             }
 
-            pedido.setEstado("pendiente");
-            PedidoEntity guardado = pedidoRepository.save(pedido);
-
-            int monto = 5000; // Puedes calcularlo en base al detalle más adelante
-            String linkPago = transbankService.generarLinkDePago(guardado.getPedidoId(), monto);
-
-            // Enviar mensaje por WhatsApp al cliente
-            String mensaje = "Hola! Tu pedido fue registrado.\nPuedes pagarlo aquí 👉 " + linkPago;
-            watiService.enviarMensaje(guardado.getTelefono(), mensaje);
+            // 2. Enviar mensaje por WhatsApp
+            try {
+                String mensaje = "🍨 Pedido recibido: " + detalle +
+                                 "\n👉 Paga aquí: " + link;
+                watiService.enviarMensaje(telefono, mensaje);
+                log.info("✅ Mensaje enviado por WhatsApp a {}", telefono);
+            } catch (Exception e) {
+                log.error("❌ Error al enviar mensaje por WhatsApp", e);
+                return ResponseEntity.status(500).body(Map.of(
+                    "detalle", "Error al enviar mensaje",
+                    "error", "Fallo en WhatsApp"
+                ));
+            }
 
             return ResponseEntity.ok(Map.of(
-                    "mensaje", "Pedido creado y link enviado por WhatsApp",
-                    "pedidoId", guardado.getPedidoId(),
-                    "linkPago", linkPago
+                "mensaje", "Pedido creado y link enviado por WhatsApp",
+                "pedidoId", pedidoId,
+                "linkPago", link
             ));
 
-        } catch (IOException e) {
+        } catch (Exception e) {
+            log.error("❌ Error inesperado al procesar pedido", e);
             return ResponseEntity.status(500).body(Map.of(
-                    "error", "No se pudo generar link o enviar mensaje",
-                    "detalle", e.getMessage()
+                "detalle", "Error interno",
+                "error", "Fallo inesperado"
             ));
         }
     }
+
 
     // ✅ Webhook para confirmar el pago desde Transbank
     @PostMapping("/confirmacion")
