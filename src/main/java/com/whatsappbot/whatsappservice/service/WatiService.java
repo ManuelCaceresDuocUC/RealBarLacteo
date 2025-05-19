@@ -1,7 +1,9 @@
 package com.whatsappbot.whatsappservice.service;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
@@ -17,22 +19,26 @@ import okhttp3.Response;
 @Service
 public class WatiService {
 
-    // Usa esta URL si estás en modo simulación (sandbox).
-private final String WATI_URL = "https://live-server.wati.io/api/v1/sendSessionMessage";
-
-    // Token desde Render o entorno local
+    private final String WATI_URL = "https://live-server.wati.io/api/v1/sendTemplateMessage";
     private final String API_KEY = System.getenv("WATI_API_KEY");
 
-    public void enviarMensaje(String telefono, String mensaje) throws IOException {
+    public void enviarMensaje(String telefono, String mensajeConLink) throws IOException {
         OkHttpClient client = new OkHttpClient();
         ObjectMapper mapper = new ObjectMapper();
 
-        // Payload del mensaje
-        Map<String, String> data = new HashMap<>();
-        data.put("phone", telefono); // sin "+"
-        data.put("message", mensaje);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("template_name", "pedido_confirmado"); // usa el nombre real
+        payload.put("broadcast_name", "pedido_bar_lacteo");
+        payload.put("phone_number", telefono);
 
-        String json = mapper.writeValueAsString(data);
+        List<Map<String, String>> parameters = new ArrayList<>();
+        Map<String, String> param = new HashMap<>();
+        param.put("name", "1");
+        param.put("value", mensajeConLink);
+        parameters.add(param);
+        payload.put("parameters", parameters);
+
+        String json = mapper.writeValueAsString(payload);
 
         RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
         Request request = new Request.Builder()
@@ -42,14 +48,8 @@ private final String WATI_URL = "https://live-server.wati.io/api/v1/sendSessionM
                 .build();
 
         Response response = client.newCall(request).execute();
-
-        // Log completo
-        System.out.println("📨 Respuesta WATI: " + response);
-
         if (!response.isSuccessful()) {
             throw new IOException("❌ Error al enviar mensaje WATI: Código " + response.code() + " - " + response.body().string());
         }
-
-        System.out.println("✅ Mensaje enviado por WhatsApp con éxito.");
     }
 }
