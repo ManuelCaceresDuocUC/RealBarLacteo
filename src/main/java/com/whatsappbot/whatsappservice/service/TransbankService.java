@@ -23,7 +23,7 @@ public class TransbankService {
 
     private static final Logger log = LoggerFactory.getLogger(TransbankService.class);
 
-    private final String API_URL = "https://webpay3g.transbank.cl/rswebpaytransaction/api/webpay/v1.3/transactions";
+    private final String API_URL = "https://webpay3gint.transbank.cl/rswebpaytransaction/api/webpay/v1.3/transactions";
     private final String COMMERCE_CODE = System.getenv("TRANSBANK_COMMERCE_CODE");
     private final String API_KEY = System.getenv("TRANSBANK_API_KEY");
 
