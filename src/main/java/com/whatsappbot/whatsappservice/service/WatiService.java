@@ -17,15 +17,19 @@ import okhttp3.Response;
 @Service
 public class WatiService {
 
-    private final String WATI_URL = "https://app.wati.io/api/v1/sendSessionMessage";
+    // Usa esta URL si estás en modo simulación (sandbox).
+    private final String WATI_URL = "https://app.wati.io/whatsapp/sendMessage";
+
+    // Token desde Render o entorno local
     private final String API_KEY = System.getenv("WATI_API_KEY");
 
     public void enviarMensaje(String telefono, String mensaje) throws IOException {
         OkHttpClient client = new OkHttpClient();
         ObjectMapper mapper = new ObjectMapper();
 
+        // Payload del mensaje
         Map<String, String> data = new HashMap<>();
-        data.put("phone", telefono); // debe ir sin el "+" (ej: 56966798353)
+        data.put("phone", telefono); // sin "+"
         data.put("message", mensaje);
 
         String json = mapper.writeValueAsString(data);
@@ -38,10 +42,14 @@ public class WatiService {
                 .build();
 
         Response response = client.newCall(request).execute();
-if (!response.isSuccessful()) {
-    throw new IOException("Error al enviar mensaje WATI: " + response);
-} else {
-    System.out.println("✅ Mensaje enviado por WhatsApp: " + response.code());
-}
+
+        // Log completo
+        System.out.println("📨 Respuesta WATI: " + response);
+
+        if (!response.isSuccessful()) {
+            throw new IOException("❌ Error al enviar mensaje WATI: Código " + response.code() + " - " + response.body().string());
+        }
+
+        System.out.println("✅ Mensaje enviado por WhatsApp con éxito.");
     }
 }
