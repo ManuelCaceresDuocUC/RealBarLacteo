@@ -25,46 +25,47 @@ public class WebhookController {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/wati")
-public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
-    log.info("📥 Payload recibido: {}", payload.toString());
+    public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
+        log.info("📥 Payload recibido: {}", payload.toString());
 
-    try {
-        JsonNode messages = payload.at("/data/messages");
+        try {
+            JsonNode messages = payload.at("/data/messages");
 
-        // 🔄 Formato antiguo (data.messages[])
-        if (!messages.isMissingNode() && messages.isArray()) {
-            for (JsonNode msg : messages) {
-                String numero = msg.get("from").asText();
-                String texto = msg.at("/text/body").asText("").toLowerCase();
+            // 🔄 Formato antiguo
+            if (!messages.isMissingNode() && messages.isArray()) {
+                for (JsonNode msg : messages) {
+                    String numero = msg.get("from").asText();
+                    String texto = msg.at("/text/body").asText("").toLowerCase();
+
+                    log.info("✉️ Mensaje recibido de {}: {}", numero, texto);
+
+                    if (texto.contains("ayuda") || texto.contains("menu")) {
+                        watiService.enviarTemplateAyuda(numero, "Cliente");
+                    }
+                }
+            }
+
+            // ✅ Formato nuevo directo desde WATI
+            else if (payload.has("eventType") && "message".equals(payload.get("eventType").asText())) {
+                String numero = payload.get("waId").asText();
+                String texto = payload.get("text").asText("").toLowerCase();
+                String nombre = payload.has("senderName") ? payload.get("senderName").asText() : "Cliente";
 
                 log.info("✉️ Mensaje recibido de {}: {}", numero, texto);
 
                 if (texto.contains("ayuda") || texto.contains("menu")) {
-                    watiService.enviarTemplateAyuda(numero, "Cliente");
+                    watiService.enviarTemplateAyuda(numero, nombre);
                 }
             }
-        }
 
-        // 📦 Formato nuevo directo
-        else if (payload.has("eventType") && "message".equals(payload.get("eventType").asText())) {
-            String numero = payload.get("waId").asText();
-            String texto = payload.get("text").asText("").toLowerCase();
-
-            log.info("✉️ Mensaje recibido de {}: {}", numero, texto);
-
-            if (texto.contains("ayuda") || texto.contains("menu")) {
-                watiService.enviarTemplateAyuda(numero, "Cliente");
+            else {
+                log.warn("⚠️ No se encontraron mensajes en el payload");
             }
+
+        } catch (Exception e) {
+            log.error("❌ Error procesando webhook de mensaje", e);
         }
 
-        else {
-            log.warn("⚠️ No se encontraron mensajes en el payload");
-        }
-
-    } catch (Exception e) {
-        log.error("❌ Error procesando webhook de mensaje", e);
+        return ResponseEntity.ok().build();
     }
-
-    return ResponseEntity.ok().build();
-}
 }
