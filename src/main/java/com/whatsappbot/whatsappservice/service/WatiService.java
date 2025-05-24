@@ -48,19 +48,35 @@ public class WatiService {
     }
 
     // ✅ Enviar plantilla de ayuda automática
-    public void enviarTemplateAyuda(String telefono, String nombreCliente) throws IOException {
-        String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+    public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
+    String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("template_name", "respuesta_ayuda"); // el nombre real de tu plantilla
-        data.put("broadcast_name", "ayuda_automatica");
+    Map<String, Object> data = new HashMap<>();
+    data.put("template_name", "respuesta_ayuda");
+    data.put("broadcast_name", "respuesta_ayuda");
 
-        List<Map<String, String>> parametros = new ArrayList<>();
-        parametros.add(Map.of("name", "1", "value", nombreCliente));
-        data.put("parameters", parametros);
+    List<Map<String, String>> parametros = new ArrayList<>();
+    parametros.add(Map.of("name", "1", "value", nombre));
+    data.put("parameters", parametros);
 
-        enviarPostWati(url, data, "plantilla de ayuda");
+    String json = mapper.writeValueAsString(data);
+
+    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+    Request request = new Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer " + apiKey)
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build();
+
+    try (Response response = client.newCall(request).execute()) {
+        if (!response.isSuccessful()) {
+            throw new IOException("❌ Error al enviar plantilla de ayuda WATI: Código " + response.code() + " - " + response.body().string());
+        } else {
+            System.out.println("📨 Plantilla de ayuda enviada correctamente");
+        }
     }
+}
 
     // ✅ Enviar mensaje de texto libre (requiere que el cliente haya escrito primero)
     public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
