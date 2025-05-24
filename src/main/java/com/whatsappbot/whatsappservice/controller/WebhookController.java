@@ -52,6 +52,15 @@ public class WebhookController {
                         watiService.enviarMensajeConTemplate(numero, pedidoId, linkPago);
                         log.info("\u2705 Pedido detectado desde carrito y procesado: {}", pedidoId);
                     }
+                                    if (texto.contains("ayuda") || texto.contains("menu")) {
+                    String nombreCliente = "Cliente"; // Puedes obtener el nombre desde una base de datos o dejarlo genérico
+                    try {
+                        watiService.enviarTemplateAyuda(numero, nombreCliente);
+                        log.info("✅ Plantilla de ayuda enviada a {}", numero);
+                    } catch (Exception e) {
+                        log.error("❌ Error al enviar plantilla de ayuda", e);
+                    }
+                }
                 }
             } else {
                 log.warn("\u26A0\uFE0F No se encontraron mensajes en el payload");

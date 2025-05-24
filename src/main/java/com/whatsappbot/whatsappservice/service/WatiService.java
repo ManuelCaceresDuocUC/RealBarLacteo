@@ -95,4 +95,34 @@ public class WatiService {
             log.info("💬 Mensaje de texto enviado a {}", telefono);
         }
     }
+    public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
+    String url = watiApiUrl + "/api/v1/sendTemplateMessage";
+
+    Map<String, Object> data = new HashMap<>();
+    data.put("template_name", "respuesta_ayuda");  // 👈 Nombre exacto de la plantilla aprobada
+    data.put("broadcast_name", "ayuda_auto");      // 👈 Nombre interno cualquiera
+    data.put("phone_number", telefono);
+
+    List<Map<String, String>> parametros = new ArrayList<>();
+    parametros.add(Map.of("name", "1", "value", nombre));
+    data.put("parameters", parametros);
+
+    String json = mapper.writeValueAsString(data);
+
+    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+    Request request = new Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer " + apiKey)
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build();
+
+    try (Response response = client.newCall(request).execute()) {
+        if (!response.isSuccessful()) {
+            throw new IOException("❌ Error al enviar plantilla AYUDA WATI: Código " + response.code() + " - " + response.body().string());
+        } else {
+            System.out.println("📨 Plantilla de ayuda enviada correctamente");
+        }
+    }
+}
 }
