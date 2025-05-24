@@ -59,25 +59,8 @@ public class WatiService {
     parametros.add(Map.of("name", "1", "value", nombre));
     data.put("parameters", parametros);
 
-    String json = mapper.writeValueAsString(data);
-
-    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
-    Request request = new Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer " + apiKey)
-            .addHeader("Content-Type", "application/json")
-            .post(body)
-            .build();
-
-    try (Response response = client.newCall(request).execute()) {
-        if (!response.isSuccessful()) {
-            throw new IOException("❌ Error al enviar plantilla de ayuda WATI: Código " + response.code() + " - " + response.body().string());
-        } else {
-            System.out.println("📨 Plantilla de ayuda enviada correctamente");
-        }
-    }
+    enviarPostWati(url, data, "plantilla de ayuda");
 }
-
     // ✅ Enviar mensaje de texto libre (requiere que el cliente haya escrito primero)
     public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
         String url = watiApiUrl + "/" + tenantId + "/api/v1/sendSessionMessage?whatsappNumber=" + telefono;
