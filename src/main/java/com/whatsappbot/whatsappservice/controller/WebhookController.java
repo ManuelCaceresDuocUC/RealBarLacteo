@@ -26,12 +26,12 @@ public class WebhookController {
 
     @PostMapping("/wati")
     public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
-        log.info("📥 Payload recibido: {}", payload.toString());
+        log.info("📥 Payload recibido: {}", payload.toPrettyString());
 
         try {
             JsonNode messages = payload.at("/data/messages");
 
-            // 🔄 Formato antiguo
+            // 🔄 Formato antiguo (WATI clásico)
             if (!messages.isMissingNode() && messages.isArray()) {
                 for (JsonNode msg : messages) {
                     String numero = msg.get("from").asText();
@@ -45,11 +45,11 @@ public class WebhookController {
                 }
             }
 
-            // ✅ Formato nuevo directo desde WATI
+            // 🆕 Formato moderno (Live Chat o Broadcast)
             else if (payload.has("eventType") && "message".equals(payload.get("eventType").asText())) {
-                String numero = payload.get("waId").asText();
-                String texto = payload.get("text").asText("").toLowerCase();
-                String nombre = payload.has("senderName") ? payload.get("senderName").asText() : "Cliente";
+                String numero = payload.path("waId").asText("");
+                String texto = payload.path("text").asText("").toLowerCase();
+                String nombre = payload.path("senderName").asText("Cliente");
 
                 log.info("✉️ Mensaje recibido de {}: {}", numero, texto);
 
@@ -59,7 +59,7 @@ public class WebhookController {
             }
 
             else {
-                log.warn("⚠️ No se encontraron mensajes en el payload");
+                log.warn("⚠️ No se encontraron mensajes válidos en el payload");
             }
 
         } catch (Exception e) {
