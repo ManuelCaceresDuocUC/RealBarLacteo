@@ -25,6 +25,8 @@ public class WatiService {
 
     @Value("${wati.api.key}")
     private String apiKey;
+    @Value("${wati.tenantId}")
+private String tenantId;
 
     private final OkHttpClient client = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -48,20 +50,34 @@ public class WatiService {
 
     // ✅ Enviar plantilla de ayuda automática
     public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
-        String url = watiApiUrl + "/api/v1/sendTemplateMessage";
+    String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("template_name", "respuesta_ayuda");
-        data.put("broadcast_name", "respuesta_ayuda");
-        data.put("phone_number", telefono);
+    Map<String, Object> data = new HashMap<>();
+    data.put("template_name", "respuesta_ayuda");
+    data.put("broadcast_name", "respuesta_ayuda");
 
-        List<Map<String, String>> parametros = new ArrayList<>();
-        parametros.add(Map.of("name", "1", "value", nombre));
-        data.put("parameters", parametros);
+    List<Map<String, String>> parametros = new ArrayList<>();
+    parametros.add(Map.of("name", "1", "value", nombre));
+    data.put("parameters", parametros);
 
-        enviarPostWati(url, data, "plantilla de ayuda");
+    String json = mapper.writeValueAsString(data);
+
+    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+    Request request = new Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer " + apiKey)
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build();
+
+    try (Response response = client.newCall(request).execute()) {
+        if (!response.isSuccessful()) {
+            throw new IOException("❌ Error al enviar plantilla de ayuda WATI: Código " + response.code() + " - " + response.body().string());
+        } else {
+            System.out.println("📨 Plantilla de ayuda enviada correctamente");
+        }
     }
-
+}
     // ✅ Enviar mensaje de texto libre (requiere sesión iniciada)
     public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
         String url = watiApiUrl + "/api/v1/sendSessionMessage?whatsappNumber=" + telefono;
