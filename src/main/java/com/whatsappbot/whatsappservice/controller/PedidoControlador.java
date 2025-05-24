@@ -36,8 +36,6 @@ public class PedidoControlador {
     private final WatiService watiService;
     private final ComandaService comandaService;
 
-
-    // ✅ Método para crear pedido y enviar link de pago por WhatsApp
     @PostMapping
     public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
         String telefono = payload.get("telefono");
@@ -49,93 +47,63 @@ public class PedidoControlador {
         try {
             PedidoEntity pedido = new PedidoEntity(pedidoId, telefono, detalle);
             pedidoRepository.save(pedido);
-            log.info("✅ Pedido guardado con ID: {}", pedidoId);
 
-            // 1. Crear transacción en Transbank
-            String link = "";
-            try {
-                link = transbankService.generarLinkDePago(pedidoId, 1000); // puedes cambiar el monto
-                log.info("✅ Link de pago generado: {}", link);
-            } catch (Exception e) {
-                log.error("❌ Error al generar link de Transbank", e);
-                return ResponseEntity.status(500).body(Map.of(
-                    "detalle", "Error al crear transacción",
-                    "error", "Fallo al generar el link de pago"
-                ));
-            }
-
-            // 2. Enviar mensaje por WhatsApp
-            try {
-                String mensaje = "🍨 Pedido recibido: " + detalle +
-                                 "\n👉 Paga aquí: " + link;
-                watiService.enviarMensaje(telefono, mensaje);
-                log.info("✅ Mensaje enviado por WhatsApp a {}", telefono);
-            } catch (Exception e) {
-                log.error("❌ Error al enviar mensaje por WhatsApp", e);
-                return ResponseEntity.status(500).body(Map.of(
-                    "detalle", "Error al enviar mensaje",
-                    "error", "Fallo en WhatsApp"
-                ));
-            }
+            String link = transbankService.generarLinkDePago(pedidoId, 1000); // Monto fijo por ahora
+            watiService.enviarMensajeConTemplate(telefono, pedidoId, link);
 
             return ResponseEntity.ok(Map.of(
                 "mensaje", "Pedido creado y link enviado por WhatsApp",
                 "pedidoId", pedidoId,
                 "linkPago", link
             ));
-
         } catch (Exception e) {
-            log.error("❌ Error inesperado al procesar pedido", e);
+            log.error("❌ Error al crear pedido", e);
             return ResponseEntity.status(500).body(Map.of(
-                "detalle", "Error interno",
-                "error", "Fallo inesperado"
+                "error", "No se pudo procesar el pedido"
             ));
         }
     }
 
-
-    // ✅ Webhook para confirmar el pago desde Transbank
     @PostMapping("/confirmacion")
-public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
-    OkHttpClient client = new OkHttpClient();
-    ObjectMapper mapper = new ObjectMapper();
+    public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
+        OkHttpClient client = new OkHttpClient();
+        ObjectMapper mapper = new ObjectMapper();
 
-    Request request = new Request.Builder()
-            .url("https://webpay3g.transbank.cl/rswebpaytransaction/api/webpay/v1.3/transactions/" + token)
-            .addHeader("Tbk-Api-Key-Id", System.getenv("TRANSBANK_COMMERCE_CODE"))
-            .addHeader("Tbk-Api-Key-Secret", System.getenv("TRANSBANK_API_KEY"))
-            .get()
-            .build();
+        Request request = new Request.Builder()
+                .url("https://webpay3g.transbank.cl/rswebpaytransaction/api/webpay/v1.3/transactions/" + token)
+                .addHeader("Tbk-Api-Key-Id", System.getenv("TRANSBANK_COMMERCE_CODE"))
+                .addHeader("Tbk-Api-Key-Secret", System.getenv("TRANSBANK_API_KEY"))
+                .get()
+                .build();
 
-    try (Response response = client.newCall(request).execute()) {
-        if (!response.isSuccessful()) return ResponseEntity.status(400).body("Error al confirmar pago");
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) return ResponseEntity.status(400).body("Error al confirmar pago");
 
-        JsonNode json = mapper.readTree(response.body().string());
-        String buyOrder = json.get("buy_order").asText(); // ej: pedido-abc123
+            JsonNode json = mapper.readTree(response.body().string());
+            String buyOrder = json.get("buy_order").asText();
 
-        Optional<PedidoEntity> pedidoOpt = pedidoRepository.findByPedidoId(buyOrder);
-        if (pedidoOpt.isPresent()) {
-            PedidoEntity pedido = pedidoOpt.get();
-            pedido.setEstado("pagado");
-            pedidoRepository.save(pedido);
+            Optional<PedidoEntity> pedidoOpt = pedidoRepository.findByPedidoId(buyOrder);
+            if (pedidoOpt.isPresent()) {
+                PedidoEntity pedido = pedidoOpt.get();
+                pedido.setEstado("pagado");
+                pedidoRepository.save(pedido);
 
-            // ✅ Generar comanda en PDF localmente
-            comandaService.generarPDF(pedido);
+                comandaService.generarPDF(pedido);
 
-            // ✅ Enviar aviso por WhatsApp al local
-            String aviso = "📥 *NUEVO PEDIDO PAGADO*\n"
-                         + "🆔 ID: " + pedido.getPedidoId() + "\n"
-                         + "📞 Teléfono: " + pedido.getTelefono() + "\n"
-                         + "📦 Detalle: " + pedido.getDetalle();
-            watiService.enviarMensaje("56952358357", aviso); // nuevo número del local
+                String mensaje = "📥 *NUEVO PEDIDO PAGADO*\n"
+                        + "🆔 ID: " + pedido.getPedidoId() + "\n"
+                        + "📞 Teléfono: " + pedido.getTelefono() + "\n"
+                        + "📦 Detalle: " + pedido.getDetalle();
 
-            return ResponseEntity.ok("Pago confirmado, comanda generada y aviso enviado.");
-        } else {
-            return ResponseEntity.status(404).body("Pedido no encontrado");
+                watiService.enviarMensajeTexto(pedido.getTelefono(), mensaje);
+
+                return ResponseEntity.ok("Pago confirmado, comanda generada y aviso enviado.");
+            } else {
+                return ResponseEntity.status(404).body("Pedido no encontrado");
+            }
+        } catch (Exception e) {
+            log.error("❌ Error interno al confirmar pago", e);
+            return ResponseEntity.status(500).body("Error interno: " + e.getMessage());
         }
-    } catch (Exception e) {
-        return ResponseEntity.status(500).body("Error interno: " + e.getMessage());
-    }
-
     }
 }

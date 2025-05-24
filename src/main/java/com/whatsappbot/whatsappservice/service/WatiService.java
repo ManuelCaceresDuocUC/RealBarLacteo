@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,37 +20,68 @@ import okhttp3.Response;
 @Service
 public class WatiService {
 
-    private final String WATI_URL = System.getenv("WATI_API_URL");
-    private final String API_KEY = System.getenv("WATI_API_KEY");
+    @Value("${wati.api.url}")
+    private String watiApiUrl;
 
-    public void enviarMensaje(String telefono, String mensajeConLink) throws IOException {
-        OkHttpClient client = new OkHttpClient();
-        ObjectMapper mapper = new ObjectMapper();
+    @Value("${wati.api.key}")
+    private String apiKey;
 
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("template_name", "pedido_confirmado"); // usa el nombre real
-        payload.put("broadcast_name", "pedido_bar_lacteo");
-        payload.put("phone_number", telefono);
+    private final OkHttpClient client = new OkHttpClient();
+    private final ObjectMapper mapper = new ObjectMapper();
 
-        List<Map<String, String>> parameters = new ArrayList<>();
-        Map<String, String> param = new HashMap<>();
-        param.put("name", "1");
-        param.put("value", mensajeConLink);
-        parameters.add(param);
-        payload.put("parameters", parameters);
+    // ✅ 1. Enviar plantilla con parámetros
+    public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkPago) throws IOException {
+        String url = watiApiUrl + "/api/v1/sendTemplateMessage";
 
-        String json = mapper.writeValueAsString(payload);
+        Map<String, Object> data = new HashMap<>();
+        data.put("template_name", "pedido_confirmado");
+        data.put("broadcast_name", "confirmacion_pedido");
+        data.put("phone_number", telefono);
+
+        List<Map<String, String>> parametros = new ArrayList<>();
+        parametros.add(Map.of("name", "1", "value", pedidoId));
+        parametros.add(Map.of("name", "2", "value", linkPago));
+        data.put("parameters", parametros);
+
+        String json = mapper.writeValueAsString(data);
 
         RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
         Request request = new Request.Builder()
-                .url(WATI_URL)
-                .addHeader("Authorization", "Bearer " + API_KEY)
+                .url(url)
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type", "application/json")
                 .post(body)
                 .build();
 
-        Response response = client.newCall(request).execute();
-        if (!response.isSuccessful()) {
-            throw new IOException("❌ Error al enviar mensaje WATI: Código " + response.code() + " - " + response.body().string());
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("❌ Error al enviar mensaje WATI: Código " + response.code() + " - " + response.body().string());
+            }
+        }
+    }
+
+    // ✅ 2. Enviar mensaje de texto libre (solo si el usuario escribió primero)
+    public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
+        String url = watiApiUrl + "/api/v1/sendSessionMessage";
+
+        Map<String, String> data = new HashMap<>();
+        data.put("phone_number", telefono);
+        data.put("message", mensaje);
+
+        String json = mapper.writeValueAsString(data);
+
+        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+        Request request = new Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(body)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("❌ Error al enviar mensaje de texto WATI: Código " + response.code() + " - " + response.body().string());
+            }
         }
     }
 }
