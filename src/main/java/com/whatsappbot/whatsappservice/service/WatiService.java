@@ -20,14 +20,14 @@ import okhttp3.Response;
 @Service
 public class WatiService {
 
-    @Value("${wati.api.url}")
-    private String watiApiUrl;
+ @Value("${wati.api.url}")
+private String watiApiUrl;
 
-    @Value("${wati.api.key}")
-    private String apiKey;
+@Value("${wati.api.key}")
+private String apiKey;
 
-    @Value("${wati.tenant.id}")
-    private String tenantId;
+@Value("${wati.tenantId}")
+private String tenantId;
 
     private final OkHttpClient client = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -87,12 +87,12 @@ public class WatiService {
             }
         }
     }
-    public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
+   public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
     String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
     Map<String, Object> data = new HashMap<>();
-    data.put("template_name", "confirmacion_pedido");  // Asegúrate de que esta plantilla coincida con la de ayuda
-    data.put("broadcast_name", "ayuda_wati");
+    data.put("template_name", "confirmacion_pedido");  // Usa la plantilla real aprobada
+    data.put("broadcast_name", "confirmacion_pedido");
 
     List<Map<String, String>> parametros = new ArrayList<>();
     parametros.add(Map.of("name", "1", "value", nombre));
