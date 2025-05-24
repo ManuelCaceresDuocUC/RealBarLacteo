@@ -28,23 +28,21 @@ public class WebhookController {
 
     @PostMapping("/wati")
     public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
-        log.debug("📥 Payload recibido: {}", payload.toString());
         try {
+            log.info("\uD83D\uDCE5 Payload recibido: {}", payload.toString());
+
             JsonNode messages = payload.at("/data/messages");
             if (!messages.isMissingNode() && messages.isArray()) {
                 for (JsonNode msg : messages) {
                     String numero = msg.get("from").asText();
                     String texto = msg.at("/text/body").asText("").toLowerCase();
 
-                    if (numero == null || numero.isEmpty()) {
-                        log.warn("⚠️ Número de WhatsApp no detectado");
-                        continue;
-                    }
+                    log.info("\u2709\uFE0F Mensaje recibido de {}: {}", numero, texto);
 
                     if (texto.contains("menu") || texto.contains("ayuda")) {
-                        String respuesta = "Hola! Puedes ver nuestro menú en: https://barlacteo.cl/menu. \nTambién puedes hacer tu pedido desde el catálogo de WhatsApp.";
+                        String respuesta = "Hola! Puedes ver nuestro men\u00fa en: https://barlacteo.cl/menu. \nTambi\u00e9n puedes hacer tu pedido desde el cat\u00e1logo de WhatsApp";
                         watiService.enviarMensajeTexto(numero, respuesta);
-                        log.info("📨 Mensaje de ayuda enviado a {}", numero);
+                        log.info("\uD83D\uDCAC Mensaje de ayuda enviado a {}", numero);
                     }
 
                     if (texto.contains("pedido confirmado")) {
@@ -52,14 +50,15 @@ public class WebhookController {
                         String linkPago = transbankService.generarLinkDePago(pedidoId, 1000);
 
                         watiService.enviarMensajeConTemplate(numero, pedidoId, linkPago);
-                        log.info("✅ Pedido detectado desde carrito y procesado: {}", pedidoId);
+                        log.info("\u2705 Pedido detectado desde carrito y procesado: {}", pedidoId);
                     }
                 }
+            } else {
+                log.warn("\u26A0\uFE0F No se encontraron mensajes en el payload");
             }
-            return ResponseEntity.ok().build();
         } catch (Exception e) {
-            log.error("❌ Error procesando webhook de mensaje", e);
-            return ResponseEntity.status(500).body("Error procesando el webhook");
+            log.error("\u274C Error procesando webhook de mensaje", e);
         }
+        return ResponseEntity.ok().build();
     }
 }
