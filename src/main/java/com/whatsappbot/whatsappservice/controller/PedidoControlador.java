@@ -40,15 +40,19 @@ public class PedidoControlador {
     public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
         String telefono = payload.get("telefono");
         String detalle = payload.get("detalle");
-        String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
 
+        if (telefono == null || telefono.isBlank() || detalle == null || detalle.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Faltan datos obligatorios"));
+        }
+
+        String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
         log.info("📝 Recibido nuevo pedido: telefono={}, detalle={}", telefono, detalle);
 
         try {
             PedidoEntity pedido = new PedidoEntity(pedidoId, telefono, detalle);
             pedidoRepository.save(pedido);
 
-            String link = transbankService.generarLinkDePago(pedidoId, 1000); // Monto fijo por ahora
+            String link = transbankService.generarLinkDePago(pedidoId, 1000);
             watiService.enviarMensajeConTemplate(telefono, pedidoId, link);
 
             return ResponseEntity.ok(Map.of(
@@ -58,9 +62,7 @@ public class PedidoControlador {
             ));
         } catch (Exception e) {
             log.error("❌ Error al crear pedido", e);
-            return ResponseEntity.status(500).body(Map.of(
-                "error", "No se pudo procesar el pedido"
-            ));
+            return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
         }
     }
 
@@ -69,10 +71,17 @@ public class PedidoControlador {
         OkHttpClient client = new OkHttpClient();
         ObjectMapper mapper = new ObjectMapper();
 
+        String commerceCode = System.getenv("TRANSBANK_COMMERCE_CODE");
+        String apiKey = System.getenv("TRANSBANK_API_KEY");
+
+        if (commerceCode == null || apiKey == null) {
+            return ResponseEntity.status(500).body("Variables de entorno de Transbank no configuradas");
+        }
+
         Request request = new Request.Builder()
                 .url("https://webpay3g.transbank.cl/rswebpaytransaction/api/webpay/v1.3/transactions/" + token)
-                .addHeader("Tbk-Api-Key-Id", System.getenv("TRANSBANK_COMMERCE_CODE"))
-                .addHeader("Tbk-Api-Key-Secret", System.getenv("TRANSBANK_API_KEY"))
+                .addHeader("Tbk-Api-Key-Id", commerceCode)
+                .addHeader("Tbk-Api-Key-Secret", apiKey)
                 .get()
                 .build();
 
@@ -96,6 +105,7 @@ public class PedidoControlador {
                         + "📦 Detalle: " + pedido.getDetalle();
 
                 watiService.enviarMensajeTexto(pedido.getTelefono(), mensaje);
+                log.info("✅ Pago confirmado para pedido {}", buyOrder);
 
                 return ResponseEntity.ok("Pago confirmado, comanda generada y aviso enviado.");
             } else {

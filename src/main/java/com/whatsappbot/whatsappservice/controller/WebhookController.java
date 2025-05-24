@@ -1,64 +1,65 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.util.Map;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.whatsappbot.whatsappservice.bot.BotCommandProcessor;
-import com.whatsappbot.whatsappservice.model.PedidoEntity;
-import com.whatsappbot.whatsappservice.service.PedidoService;
-import com.whatsappbot.whatsappservice.service.WhatsAppService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whatsappbot.whatsappservice.service.TransbankService;
+import com.whatsappbot.whatsappservice.service.WatiService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping("/wati")
+@RequestMapping("/api/webhook")
+@RequiredArgsConstructor
+@Slf4j
 public class WebhookController {
 
-    private static final Logger logger = LoggerFactory.getLogger(WebhookController.class);
+    private final TransbankService transbankService;
+    private final WatiService watiService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Autowired
-    private WhatsAppService whatsAppService;
-    @Autowired
-    private PedidoService pedidoService;
-
-    @PostMapping("/webhook")
-    public ResponseEntity<Void> recibirMensaje(@RequestBody Map<String, Object> payload) {
+    @PostMapping("/wati")
+    public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
+        log.debug("📥 Payload recibido: {}", payload.toString());
         try {
-            Object dataObj = payload.get("data");
+            JsonNode messages = payload.at("/data/messages");
+            if (!messages.isMissingNode() && messages.isArray()) {
+                for (JsonNode msg : messages) {
+                    String numero = msg.get("from").asText();
+                    String texto = msg.at("/text/body").asText("").toLowerCase();
 
-            if (dataObj instanceof Map<?, ?> rawMap) {
-                Object mensajeObj = rawMap.get("message");
-                Object numeroObj = rawMap.get("waId");
-
-                if (mensajeObj instanceof String mensaje && numeroObj instanceof String numero) {
-
-                    // Detectar si el mensaje es un pedido desde el carrito nativo
-                    if (mensaje.contains("pedido:") && mensaje.contains("×") && mensaje.contains("total")) {
-                        String pedidoId = "PED-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-
-                        PedidoEntity pedido = new PedidoEntity(pedidoId, numero, mensaje);
-                        pedidoService.guardarPedido(pedido);                                whatsAppService.enviarMensaje(numero, "✅ Recibimos tu pedido 🧾\nPuedes pagar aquí 👉 https://barlacteo.cl/pagar?pedido=" + pedidoId);
-                        return ResponseEntity.ok().build();
+                    if (numero == null || numero.isEmpty()) {
+                        log.warn("⚠️ Número de WhatsApp no detectado");
+                        continue;
                     }
 
-                    // Si no es pedido, procesar normalmente
-                    String respuesta = BotCommandProcessor.procesar(mensaje);
-                    whatsAppService.enviarMensaje(numero, respuesta);
+                    if (texto.contains("menu") || texto.contains("ayuda")) {
+                        String respuesta = "Hola! Puedes ver nuestro menú en: https://barlacteo.cl/menu. \nTambién puedes hacer tu pedido desde el catálogo de WhatsApp.";
+                        watiService.enviarMensajeTexto(numero, respuesta);
+                        log.info("📨 Mensaje de ayuda enviado a {}", numero);
+                    }
+
+                    if (texto.contains("pedido confirmado")) {
+                        String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+                        String linkPago = transbankService.generarLinkDePago(pedidoId, 1000);
+
+                        watiService.enviarMensajeConTemplate(numero, pedidoId, linkPago);
+                        log.info("✅ Pedido detectado desde carrito y procesado: {}", pedidoId);
+                    }
                 }
             }
+            return ResponseEntity.ok().build();
         } catch (Exception e) {
-            logger.error("Error al procesar el mensaje", e);
+            log.error("❌ Error procesando webhook de mensaje", e);
+            return ResponseEntity.status(500).body("Error procesando el webhook");
         }
-        return ResponseEntity.ok().build();
     }
-    public PedidoEntity getPedidoPorId(String id) {
-    return pedidoService.buscarPedidoPorId(id);
-}
 }

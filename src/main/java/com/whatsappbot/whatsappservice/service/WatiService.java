@@ -11,12 +11,14 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+@Slf4j
 @Service
 public class WatiService {
 
@@ -29,41 +31,47 @@ public class WatiService {
     private final OkHttpClient client = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
 
-    // ✅ 1. Enviar plantilla con parámetros
+    // ✅ Enviar plantilla con parámetro {{1}}
     public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkPago) throws IOException {
-    String url = watiApiUrl + "/api/v1/sendTemplateMessage";
+        if (telefono == null || telefono.isBlank()) {
+            throw new IllegalArgumentException("📵 Número de teléfono vacío o nulo");
+        }
 
-    Map<String, Object> data = new HashMap<>();
-    data.put("template_name", "confirmacion_pedido");
-    data.put("broadcast_name", "confirmacion_pedido");
-    data.put("phone_number", telefono);
+        String url = watiApiUrl + "/api/v1/sendTemplateMessage";
 
-    // ✅ SOLO se incluye el parámetro {{1}} con el nombre o ID
-    List<Map<String, String>> parametros = new ArrayList<>();
-    parametros.add(Map.of("name", "1", "value", "Manuel")); // o pedidoId si quieres
-    data.put("parameters", parametros);
+        Map<String, Object> data = new HashMap<>();
+        data.put("template_name", "confirmacion_pedido");
+        data.put("broadcast_name", "confirmacion_pedido");
+        data.put("phone_number", telefono);
 
-    String json = mapper.writeValueAsString(data);
+        List<Map<String, String>> parametros = new ArrayList<>();
+        parametros.add(Map.of("name", "1", "value", pedidoId)); // puedes usar linkPago si tu plantilla lo acepta
+        data.put("parameters", parametros);
 
-    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
-    Request request = new Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer " + apiKey)
-            .addHeader("Content-Type", "application/json")
-            .post(body)
-            .build();
+        String json = mapper.writeValueAsString(data);
 
-    try (Response response = client.newCall(request).execute()) {
-        if (!response.isSuccessful()) {
-            throw new IOException("❌ Error al enviar mensaje WATI: Código " + response.code() + " - " + response.body().string());
-        } else {
-            System.out.println("📨 Mensaje enviado exitosamente");
+        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+        Request request = new Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(body)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("❌ Error al enviar mensaje WATI: Código " + response.code() + " - " + response.body().string());
+            }
+            log.info("📨 Plantilla enviada exitosamente a {}", telefono);
         }
     }
-}
 
-    // ✅ 2. Enviar mensaje de texto libre (solo si el usuario escribió primero)
+    // ✅ Enviar mensaje de texto libre (si el usuario escribió primero)
     public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
+        if (telefono == null || telefono.isBlank()) {
+            throw new IllegalArgumentException("📵 Número de teléfono vacío o nulo");
+        }
+
         String url = watiApiUrl + "/api/v1/sendSessionMessage";
 
         Map<String, String> data = new HashMap<>();
@@ -84,6 +92,7 @@ public class WatiService {
             if (!response.isSuccessful()) {
                 throw new IOException("❌ Error al enviar mensaje de texto WATI: Código " + response.code() + " - " + response.body().string());
             }
+            log.info("💬 Mensaje de texto enviado a {}", telefono);
         }
     }
 }
