@@ -34,34 +34,38 @@ public class TransbankService {
         log.info("TRANSBANK_API_KEY: {}", (API_KEY != null ? "[CARGADA]" : "❌ NO CARGADA"));
     }
 
-    public String generarLinkDePago(String buyOrder, int amount) throws IOException {
-        OkHttpClient client = new OkHttpClient();
+    public Map<String, String> generarLinkDePago(String buyOrder, int amount) throws IOException {
+    OkHttpClient client = new OkHttpClient();
 
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("buy_order", buyOrder);
-        payload.put("session_id", UUID.randomUUID().toString());
-        payload.put("amount", amount);
-        payload.put("return_url", "https://realbarlacteo.onrender.com/webpay/confirmacion");
+    Map<String, Object> payload = new HashMap<>();
+    payload.put("buy_order", buyOrder);
+    payload.put("session_id", UUID.randomUUID().toString());
+    payload.put("amount", amount);
+    payload.put("return_url", "https://realbarlacteo.onrender.com/webpay/confirmacion");
 
-        ObjectMapper mapper = new ObjectMapper();
-        String json = mapper.writeValueAsString(payload);
+    ObjectMapper mapper = new ObjectMapper();
+    String json = mapper.writeValueAsString(payload);
 
-        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
 
-        Request request = new Request.Builder()
-                .url(API_URL)
-                .addHeader("Tbk-Api-Key-Id", COMMERCE_CODE)
-                .addHeader("Tbk-Api-Key-Secret", API_KEY)
-                .post(body)
-                .build();
+    Request request = new Request.Builder()
+            .url(API_URL)
+            .addHeader("Tbk-Api-Key-Id", COMMERCE_CODE)
+            .addHeader("Tbk-Api-Key-Secret", API_KEY)
+            .post(body)
+            .build();
 
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                String errorBody = response.body() != null ? response.body().string() : "sin detalle";
-                throw new IOException("Error al crear transacción. Código: " + response.code() + " - " + errorBody);
-            }
-            JsonNode node = mapper.readTree(response.body().string());
-            return "https://webpay3g.transbank.cl/webpayserver/initTransaction?token=" + node.get("token").asText();
+    try (Response response = client.newCall(request).execute()) {
+        if (!response.isSuccessful()) {
+            String errorBody = response.body() != null ? response.body().string() : "sin detalle";
+            throw new IOException("Error al crear transacción. Código: " + response.code() + " - " + errorBody);
         }
+
+        JsonNode node = mapper.readTree(response.body().string());
+        return Map.of(
+            "url", "https://webpay3g.transbank.cl/webpayserver/initTransaction.cgi",
+            "token", node.get("token").asText()
+        );
     }
+}
 }

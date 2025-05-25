@@ -20,15 +20,18 @@ public class PagoControlador {
     private final TransbankService transbankService;
 
     @PostMapping("/iniciar")
-    public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
-        String pedidoId = (String) body.get("pedidoId");
-int monto = ((Number) body.get("monto")).intValue();
+public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
+    String pedidoId = (String) body.get("pedidoId");
+    int monto = ((Number) body.get("monto")).intValue();
 
-        try {
-            String url = transbankService.generarLinkDePago(pedidoId, monto);
-            return ResponseEntity.ok(Map.of("url", url));
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("error", "No se pudo iniciar el pago"));
-        }
+    try {
+        // Ahora obtenemos un Map con "url" y "token"
+        Map<String, String> datosPago = transbankService.generarLinkDePago(pedidoId, monto);
+
+        // Se devuelve tal cual para que el frontend pueda generar el form con token_ws
+        return ResponseEntity.ok(datosPago);
+    } catch (Exception e) {
+        return ResponseEntity.status(500).body(Map.of("error", "No se pudo iniciar el pago"));
     }
+}
 }
