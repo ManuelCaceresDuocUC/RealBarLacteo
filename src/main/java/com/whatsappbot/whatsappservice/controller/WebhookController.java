@@ -54,7 +54,7 @@ public class WebhookController {
                 log.info("🛒 Pedido guardado como pendiente: {} → Total: {}", pedidoId, total);
 
                 // Generar link de pago personalizado (ejemplo con dominio ficticio)
-                String linkPago = "https://barlacteo.cl/pagar?pedidoId=" + pedidoId;
+String linkPago = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/pagar_modificado.html?pedidoId=" + pedidoId;
 
                 // Enviar plantilla de pago estático con el total y link
                 watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
