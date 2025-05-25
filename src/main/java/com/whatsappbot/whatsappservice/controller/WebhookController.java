@@ -1,5 +1,7 @@
 package com.whatsappbot.whatsappservice.controller;
 
+import java.util.UUID;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -8,6 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whatsappbot.whatsappservice.model.PedidoEntity;
+import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
 import lombok.RequiredArgsConstructor;
@@ -20,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 public class WebhookController {
 
     private final WatiService watiService;
+    private final PedidoRepository pedidoRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/wati")
@@ -27,26 +32,37 @@ public class WebhookController {
         log.info("📥 Payload recibido: {}", payload.toPrettyString());
 
         try {
-            // Extraer campos comunes del payload
             String tipo = payload.path("type").asText("");
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
 
-            // 🛒 Detectar pedido desde el carrito de WhatsApp
+            // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
                 JsonNode order = payload.path("order");
                 double total = order.path("total").asDouble(0);
+                String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+                String detalle = "Pedido desde catálogo";
 
-                log.info("🛒 Pedido recibido desde el catálogo → Teléfono: {}, Total: {}", telefono, total);
+                // Guardar pedido en la base de datos como "pendiente"
+                PedidoEntity pedido = new PedidoEntity();
+                pedido.setPedidoId(pedidoId);
+                pedido.setTelefono(telefono);
+                pedido.setDetalle(detalle);
+                pedido.setEstado("pendiente");
+                pedidoRepository.save(pedido);
 
-                // Enviar plantilla de pago estático
-                watiService.enviarMensajePagoEstatico(telefono, total);
+                log.info("🛒 Pedido guardado como pendiente: {} → Total: {}", pedidoId, total);
+
+                // Generar link de pago personalizado (ejemplo con dominio ficticio)
+                String linkPago = "https://barlacteo.cl/pagar?pedidoId=" + pedidoId;
+
+                // Enviar plantilla de pago estático con el total y link
+                watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
             }
 
-            // 💬 Detectar mensajes de texto como "ayuda"
+            // 💬 Mensaje de texto: ayuda
             else if ("text".equalsIgnoreCase(tipo)) {
                 String texto = payload.path("text").asText("").toLowerCase();
-
                 log.info("📥 Mensaje de texto: {} desde {}", texto, telefono);
 
                 if (texto.contains("ayuda")) {
