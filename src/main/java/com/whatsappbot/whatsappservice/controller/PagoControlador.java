@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/pagos")
 @RequiredArgsConstructor
@@ -20,18 +22,19 @@ public class PagoControlador {
     private final TransbankService transbankService;
 
     @PostMapping("/iniciar")
-public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
-    String pedidoId = (String) body.get("pedidoId");
-    int monto = ((Number) body.get("monto")).intValue();
+    public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
+        String pedidoId = (String) body.get("pedidoId");
+        int monto = ((Number) body.get("monto")).intValue();
 
-    try {
-        // Ahora obtenemos un Map con "url" y "token"
-        Map<String, String> datosPago = transbankService.generarLinkDePago(pedidoId, monto);
+        log.info("🧾 Recibida solicitud de pago → Pedido ID: {}, Monto: {}", pedidoId, monto);
 
-        // Se devuelve tal cual para que el frontend pueda generar el form con token_ws
-        return ResponseEntity.ok(datosPago);
-    } catch (Exception e) {
-        return ResponseEntity.status(500).body(Map.of("error", "No se pudo iniciar el pago"));
+        try {
+            Map<String, String> datosPago = transbankService.generarLinkDePago(pedidoId, monto);
+            log.info("✅ Link de pago generado correctamente: {}", datosPago.get("url"));
+            return ResponseEntity.ok(datosPago);
+        } catch (Exception e) {
+            log.error("❌ Error al iniciar el pago", e);  // Este log es esencial para ver el detalle en Render
+            return ResponseEntity.status(500).body(Map.of("error", "No se pudo iniciar el pago"));
+        }
     }
-}
 }
