@@ -50,11 +50,11 @@ public class TransbankService {
 
     // ✅ USA el endpoint de integración (NO el de producción)
     Request request = new Request.Builder()
-            .url("https://webpay3gint.transbank.cl/rswebpaytransaction/api/webpay/v1.3/transactions")
-            .addHeader("Tbk-Api-Key-Id", "597055555532") // Código de comercio de integración
-            .addHeader("Tbk-Api-Key-Secret", "579B532A7440BB0C9079DED094D31EA1615BACEB56610332264630D42D0A36B1C") // API Key integración
-            .post(body)
-            .build();
+    .url(API_URL)
+    .addHeader("Tbk-Api-Key-Id", COMMERCE_CODE)
+    .addHeader("Tbk-Api-Key-Secret", API_KEY)
+    .post(body)
+    .build();
 
     try (Response response = client.newCall(request).execute()) {
         if (!response.isSuccessful()) {
