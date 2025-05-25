@@ -3,6 +3,7 @@ package com.whatsappbot.whatsappservice.controller;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +21,10 @@ import lombok.extern.slf4j.Slf4j;
 public class PagoControlador {
 
     private final TransbankService transbankService;
-
+    @GetMapping("/test")
+public ResponseEntity<?> test() {
+    return ResponseEntity.ok("✅ El backend responde correctamente.");
+}
     @PostMapping("/iniciar")
     public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
         String pedidoId = (String) body.get("pedidoId");
