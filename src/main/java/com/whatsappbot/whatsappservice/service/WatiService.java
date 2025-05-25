@@ -122,4 +122,35 @@ private String tenantId;
             }
         }
     }
+    public void enviarMensajePagoEstatico(String telefono, Double total, String linkPago) throws IOException {
+    String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+
+    Map<String, Object> data = new HashMap<>();
+    data.put("template_name", "pago_estatico");
+    data.put("broadcast_name", "pago_estatico");
+
+    List<Map<String, String>> parametros = new ArrayList<>();
+    parametros.add(Map.of("name", "1", "value", String.format("$%.0f", total)));
+    parametros.add(Map.of("name", "2", "value", linkPago));
+    data.put("parameters", parametros);
+
+    String json = mapper.writeValueAsString(data);
+
+    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+    Request request = new Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer " + apiKey)
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build();
+
+    try (Response response = client.newCall(request).execute()) {
+        if (!response.isSuccessful()) {
+            throw new IOException("❌ Error al enviar plantilla de pago estático WATI: Código " + response.code() + " - " + response.body().string());
+        } else {
+            System.out.println("📨 Plantilla de pago estático enviada correctamente");
+        }
+    }
+}
+    
 }
