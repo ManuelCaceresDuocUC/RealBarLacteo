@@ -22,29 +22,19 @@ import lombok.extern.slf4j.Slf4j;
 public class PagoControlador {
 
     private final TransbankService transbankService;
+
     @GetMapping("/test")
-public ResponseEntity<?> test() {
-    return ResponseEntity.ok("✅ El backend responde correctamente.");
-}
-@GetMapping("/ping")
-public ResponseEntity<?> ping() {
-    return ResponseEntity.ok(Map.of("mensaje", "pong"));
-}
+    public ResponseEntity<?> test() {
+        return ResponseEntity.ok("✅ El backend responde correctamente.");
+    }
+
+    @GetMapping("/ping")
+    public ResponseEntity<?> ping() {
+        return ResponseEntity.ok(Map.of("mensaje", "pong"));
+    }
+
     @PostMapping("/iniciar")
     public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
-<<<<<<< HEAD
-        String pedidoId = (String) body.get("pedidoId");
-        int monto = ((Number) body.get("monto")).intValue();
-
-        log.info("🧾 Recibida solicitud de pago → Pedido ID: {}, Monto: {}", pedidoId, monto);
-
-        try {
-            Map<String, String> datosPago = transbankService.generarLinkDePago(pedidoId, monto);
-            log.info("✅ Link de pago generado correctamente: {}", datosPago.get("url"));
-            return ResponseEntity.ok(datosPago);
-        } catch (Exception e) {
-            log.error("❌ Error al iniciar el pago", e);  // Este log es esencial para ver el detalle en Render
-=======
         try {
             String pedidoId = (String) body.get("pedidoId");
             int monto = ((Number) body.get("monto")).intValue();
@@ -58,7 +48,6 @@ public ResponseEntity<?> ping() {
 
         } catch (Exception e) {
             log.error("❌ Error al iniciar el pago", e);
->>>>>>> rollback-pago2
             return ResponseEntity.status(500).body(Map.of("error", "No se pudo iniciar el pago"));
         }
     }

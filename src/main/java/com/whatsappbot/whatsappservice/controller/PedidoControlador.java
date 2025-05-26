@@ -34,14 +34,10 @@ public class PedidoControlador {
     private final ComandaService comandaService;
 
     @PostMapping
-public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
-    String telefono = payload.get("telefono");
-    String detalle = payload.get("detalle");
+    public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
+        String telefono = payload.get("telefono");
+        String detalle = payload.get("detalle");
 
-<<<<<<< HEAD
-    if (telefono == null || telefono.isBlank() || detalle == null || detalle.isBlank()) {
-        return ResponseEntity.badRequest().body(Map.of("error", "Faltan datos obligatorios"));
-=======
         if (telefono == null || telefono.isBlank() || detalle == null || detalle.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Faltan datos obligatorios"));
         }
@@ -67,33 +63,7 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
             log.error("❌ Error al crear pedido", e);
             return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
         }
->>>>>>> rollback-pago2
     }
-
-    String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
-    log.info("📝 Recibido nuevo pedido: telefono={}, detalle={}", telefono, detalle);
-
-    try {
-        PedidoEntity pedido = new PedidoEntity(pedidoId, telefono, detalle);
-        pedidoRepository.save(pedido);
-
-        // 🔄 Cambiado: obtener el mapa con url y token
-        Map<String, String> datosPago = transbankService.generarLinkDePago(pedidoId, 1000);
-        String link = datosPago.get("url");
-
-        watiService.enviarMensajeConTemplate(telefono, pedidoId, link);
-
-        return ResponseEntity.ok(Map.of(
-            "mensaje", "Pedido creado y link enviado por WhatsApp",
-            "pedidoId", pedidoId,
-            "linkPago", link
-        ));
-    } catch (Exception e) {
-        log.error("❌ Error al crear pedido", e);
-        return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
-    }
-}
-
 
     @PostMapping("/confirmacion")
     public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
