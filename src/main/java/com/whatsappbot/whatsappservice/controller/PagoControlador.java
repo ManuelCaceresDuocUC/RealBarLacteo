@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public ResponseEntity<?> ping() {
 }
     @PostMapping("/iniciar")
     public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
+<<<<<<< HEAD
         String pedidoId = (String) body.get("pedidoId");
         int monto = ((Number) body.get("monto")).intValue();
 
@@ -42,6 +44,21 @@ public ResponseEntity<?> ping() {
             return ResponseEntity.ok(datosPago);
         } catch (Exception e) {
             log.error("❌ Error al iniciar el pago", e);  // Este log es esencial para ver el detalle en Render
+=======
+        try {
+            String pedidoId = (String) body.get("pedidoId");
+            int monto = ((Number) body.get("monto")).intValue();
+
+            log.info("🧾 Recibida solicitud de pago → Pedido ID: {}, Monto: {}", pedidoId, monto);
+
+            PagoResponseDTO datosPago = transbankService.generarLinkDePago(pedidoId, monto);
+
+            log.info("✅ Link de pago generado correctamente");
+            return ResponseEntity.ok(datosPago);
+
+        } catch (Exception e) {
+            log.error("❌ Error al iniciar el pago", e);
+>>>>>>> rollback-pago2
             return ResponseEntity.status(500).body(Map.of("error", "No se pudo iniciar el pago"));
         }
     }
