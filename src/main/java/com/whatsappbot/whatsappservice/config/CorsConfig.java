@@ -13,6 +13,7 @@ public class CorsConfig implements WebMvcConfigurer {
             .allowedOrigins("https://barlacteo-catalogo.s3.us-east-1.amazonaws.com")
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
             .allowedHeaders("*")
-            .allowCredentials(false); // Puedes poner true si usas cookies
+            .exposedHeaders("*")
+            .allowCredentials(false);
     }
 }
