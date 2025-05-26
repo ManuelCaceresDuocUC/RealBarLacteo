@@ -53,8 +53,8 @@ private String tenantId;
     String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
     Map<String, Object> data = new HashMap<>();
-    data.put("template_name", "respuesta_ayuda");
-    data.put("broadcast_name", "respuesta_ayuda");
+    data.put("template_name", "respuesta_ayuda1");
+    data.put("broadcast_name", "respuesta_ayuda1");
 
     List<Map<String, String>> parametros = new ArrayList<>();
     parametros.add(Map.of("name", "1", "value", nombre));
@@ -130,7 +130,9 @@ private String tenantId;
     data.put("broadcast_name", "pago_estatico");
 
     List<Map<String, String>> parametros = new ArrayList<>();
-    parametros.add(Map.of("name", "1", "value", String.format("$%.0f", total)));
+    // ⚠️ Si total es 0, mostramos un mensaje genérico, de lo contrario mostramos el valor
+    String valorTotal = (total <= 0.0) ? "por definir" : String.format("$%.0f", total);
+    parametros.add(Map.of("name", "1", "value", valorTotal));
     parametros.add(Map.of("name", "2", "value", linkPago));
     data.put("parameters", parametros);
 

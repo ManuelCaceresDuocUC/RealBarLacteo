@@ -1,5 +1,6 @@
 package com.whatsappbot.whatsappservice.controller;
 
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
+import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class WebhookController {
 
     private final WatiService watiService;
     private final PedidoRepository pedidoRepository;
+    private final TransbankService transbankService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/wati")
@@ -38,12 +41,11 @@ public class WebhookController {
 
             // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
-                JsonNode order = payload.path("order");
-                double total = order.path("total").asDouble(0);
+                double total = 0.0; // No viene total real desde WATI
                 String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                 String detalle = "Pedido desde catálogo";
 
-                // Guardar pedido en la base de datos como "pendiente"
+                // Guardar pedido como pendiente
                 PedidoEntity pedido = new PedidoEntity();
                 pedido.setPedidoId(pedidoId);
                 pedido.setTelefono(telefono);
@@ -51,12 +53,12 @@ public class WebhookController {
                 pedido.setEstado("pendiente");
                 pedidoRepository.save(pedido);
 
-                log.info("🛒 Pedido guardado como pendiente: {} → Total: {}", pedidoId, total);
+                log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
 
-                // Generar link de pago personalizado (ejemplo con dominio ficticio)
-String linkPago = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/pagar_modificado.html?pedidoId=" + pedidoId;
+                // Enlace al formulario para ingresar monto manualmente
+                String linkPago = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/pagar_modificado.html?pedidoId=" + pedidoId;
 
-                // Enviar plantilla de pago estático con el total y link
+                // Enviar plantilla por WhatsApp con el link
                 watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
             }
 

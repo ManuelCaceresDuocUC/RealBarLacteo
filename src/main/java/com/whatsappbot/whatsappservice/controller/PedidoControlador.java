@@ -11,19 +11,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.service.ComandaService;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
+import cl.transbank.webpay.webpayplus.responses.WebpayPlusTransactionCommitResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 
 @Slf4j
 @RestController
@@ -52,7 +49,9 @@ public class PedidoControlador {
             PedidoEntity pedido = new PedidoEntity(pedidoId, telefono, detalle);
             pedidoRepository.save(pedido);
 
-            String link = transbankService.generarLinkDePago(pedidoId, 1000);
+            PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, 1000);
+            String link = pago.getUrl();
+
             watiService.enviarMensajeConTemplate(telefono, pedidoId, link);
 
             return ResponseEntity.ok(Map.of(
@@ -68,28 +67,9 @@ public class PedidoControlador {
 
     @PostMapping("/confirmacion")
     public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
-        OkHttpClient client = new OkHttpClient();
-        ObjectMapper mapper = new ObjectMapper();
-
-        String commerceCode = System.getenv("TRANSBANK_COMMERCE_CODE");
-        String apiKey = System.getenv("TRANSBANK_API_KEY");
-
-        if (commerceCode == null || apiKey == null) {
-            return ResponseEntity.status(500).body("Variables de entorno de Transbank no configuradas");
-        }
-
-        Request request = new Request.Builder()
-                .url("https://webpay3g.transbank.cl/rswebpaytransaction/api/webpay/v1.3/transactions/" + token)
-                .addHeader("Tbk-Api-Key-Id", commerceCode)
-                .addHeader("Tbk-Api-Key-Secret", apiKey)
-                .get()
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) return ResponseEntity.status(400).body("Error al confirmar pago");
-
-            JsonNode json = mapper.readTree(response.body().string());
-            String buyOrder = json.get("buy_order").asText();
+        try {
+            WebpayPlusTransactionCommitResponse response = transbankService.confirmarTransaccion(token);
+            String buyOrder = response.getBuyOrder();
 
             Optional<PedidoEntity> pedidoOpt = pedidoRepository.findByPedidoId(buyOrder);
             if (pedidoOpt.isPresent()) {
