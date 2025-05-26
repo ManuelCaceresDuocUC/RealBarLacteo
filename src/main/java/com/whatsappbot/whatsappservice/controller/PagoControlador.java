@@ -25,6 +25,10 @@ public class PagoControlador {
 public ResponseEntity<?> test() {
     return ResponseEntity.ok("✅ El backend responde correctamente.");
 }
+@GetMapping("/ping")
+public ResponseEntity<?> ping() {
+    return ResponseEntity.ok(Map.of("mensaje", "pong"));
+}
     @PostMapping("/iniciar")
     public ResponseEntity<?> iniciarPago(@RequestBody Map<String, Object> body) {
         String pedidoId = (String) body.get("pedidoId");
