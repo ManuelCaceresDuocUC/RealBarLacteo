@@ -42,15 +42,19 @@ public class TransbankService {
     public WebpayPlusTransactionCommitResponse confirmarTransaccion(String token) throws Exception {
         return transaction.commit(token);
     }
+public PagoResponseDTO generarLinkDePago(String buyOrder, int amount) {
+    try {
+        String sessionId = UUID.randomUUID().toString();
+        WebpayPlusTransactionCreateResponse response = transaction.create(buyOrder, sessionId, amount, returnUrl);
 
-    public PagoResponseDTO generarLinkDePago(String buyOrder, int amount) {
-        try {
-            String sessionId = UUID.randomUUID().toString();
-            WebpayPlusTransactionCreateResponse response = transaction.create(buyOrder, sessionId, amount, returnUrl);
-            return new PagoResponseDTO(response.getUrl(), response.getToken());
-        } catch (Exception e) {
-            log.error("❌ Error al crear la transacción Webpay: {}", e.getMessage(), e);
-            throw new RuntimeException("Error al generar el link de pago con Transbank");
-        }
+        // 🔧 Aseguramos que la URL enviada incluya el token
+        String urlConToken = response.getUrl() + "?token=" + response.getToken();
+
+        return new PagoResponseDTO(urlConToken, response.getToken());
+
+    } catch (Exception e) {
+        log.error("❌ Error al crear la transacción Webpay: {}", e.getMessage(), e);
+        throw new RuntimeException("Error al generar el link de pago con Transbank");
     }
+}
 }
