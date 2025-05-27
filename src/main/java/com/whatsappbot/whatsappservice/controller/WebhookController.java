@@ -1,6 +1,5 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -11,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.service.TransbankService;
@@ -41,7 +41,7 @@ public class WebhookController {
 
             // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
-                double total = 0.0; // No viene total real desde WATI
+                int montoFijo = 1000; // puedes ajustar el monto o dejarlo como placeholder
                 String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                 String detalle = "Pedido desde catálogo";
 
@@ -55,11 +55,12 @@ public class WebhookController {
 
                 log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
 
-                // Enlace al formulario para ingresar monto manualmente
-                String linkPago = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/pagar_modificado.html?pedidoId=" + pedidoId;
+                // Generar link de pago real con Transbank
+                PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, montoFijo);
+                String linkPago = pago.getUrl();
 
-                // Enviar plantilla por WhatsApp con el link
-                watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
+                // Enviar plantilla por WhatsApp con el link generado
+                watiService.enviarMensajePagoEstatico(telefono, (double) montoFijo, linkPago);
             }
 
             // 💬 Mensaje de texto: ayuda
