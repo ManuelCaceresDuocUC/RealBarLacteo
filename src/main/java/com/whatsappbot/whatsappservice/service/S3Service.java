@@ -37,7 +37,9 @@ public class S3Service {
 
     public String subirComanda(String nombreArchivo, InputStream contenido) {
     try {
-        byte[] bytes = contenido.readAllBytes(); // Lee todo el contenido primero
+        System.out.println("📤 Subiendo a S3: bucket=" + bucketName + ", archivo=" + nombreArchivo);
+
+        byte[] bytes = contenido.readAllBytes();
 
         PutObjectRequest request = PutObjectRequest.builder()
             .bucket(bucketName)
@@ -48,12 +50,20 @@ public class S3Service {
 
         s3.putObject(request, RequestBody.fromBytes(bytes));
 
-        return "https://" + bucketName + ".s3.amazonaws.com/" +
+        String url = "https://" + bucketName + ".s3.amazonaws.com/" +
             URLEncoder.encode(nombreArchivo, StandardCharsets.UTF_8);
+        System.out.println("✅ Archivo subido a S3 correctamente: " + url);
+        return url;
     } catch (IOException e) {
+        System.err.println("❌ Error al leer el InputStream del PDF:");
+        e.printStackTrace();
+        return null;
+    } catch (Exception e) {
+        System.err.println("❌ Error general al subir a S3:");
         e.printStackTrace();
         return null;
     }
 }
+
 
 }

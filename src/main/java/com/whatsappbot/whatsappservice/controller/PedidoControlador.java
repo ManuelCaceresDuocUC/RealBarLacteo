@@ -80,6 +80,7 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
             // ✅ Generar PDF de la comanda
             
 String urlComanda = comandaService.generarPDF(pedido);
+System.out.println("🔗 URL comanda generada: " + urlComanda);
 
             // ✅ Enviar plantilla simple de confirmación por WhatsApp
 if (urlComanda != null) {

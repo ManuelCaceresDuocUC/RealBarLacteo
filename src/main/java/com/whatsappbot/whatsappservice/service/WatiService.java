@@ -104,24 +104,33 @@ private String tenantId;
 
     // 🔁 Método común para plantillas
     private void enviarPostWati(String url, Map<String, Object> data, String descripcion) throws IOException {
-        String json = mapper.writeValueAsString(data);
+    String json = mapper.writeValueAsString(data);
 
-        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
-        Request request = new Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .addHeader("Content-Type", "application/json")
-                .post(body)
-                .build();
+    System.out.println("📤 Enviando POST a WATI: " + url);
+    System.out.println("📦 Payload JSON: " + json);
 
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new IOException("❌ Error al enviar " + descripcion + " WATI: Código " + response.code() + " - " + response.body().string());
-            } else {
-                System.out.println("📨 " + descripcion + " enviada correctamente");
-            }
+    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+    Request request = new Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer " + apiKey)
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build();
+
+    try (Response response = client.newCall(request).execute()) {
+        String responseBody = response.body() != null ? response.body().string() : "sin cuerpo";
+        if (!response.isSuccessful()) {
+            System.err.println("❌ Error al enviar " + descripcion + " WATI:");
+            System.err.println("Código HTTP: " + response.code());
+            System.err.println("Respuesta: " + responseBody);
+            throw new IOException("WATI devolvió error al enviar " + descripcion);
+        } else {
+            System.out.println("✅ " + descripcion + " enviada correctamente");
+            System.out.println("📨 Respuesta WATI: " + responseBody);
         }
     }
+}
+
     public void enviarMensajePagoEstatico(String telefono, Double total, String linkPago) throws IOException {
     String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
