@@ -36,21 +36,24 @@ public class S3Service {
     }
 
     public String subirComanda(String nombreArchivo, InputStream contenido) {
-        try {
-            PutObjectRequest request = PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(nombreArchivo)
-                .contentType("application/pdf")
-                .acl("public-read")
-                .build();
+    try {
+        byte[] bytes = contenido.readAllBytes(); // Lee todo el contenido primero
 
-            s3.putObject(request, RequestBody.fromInputStream(contenido, contenido.available()));
+        PutObjectRequest request = PutObjectRequest.builder()
+            .bucket(bucketName)
+            .key(nombreArchivo)
+            .contentType("application/pdf")
+            .acl("public-read")
+            .build();
 
-            return "https://" + bucketName + ".s3.amazonaws.com/" +
-                URLEncoder.encode(nombreArchivo, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null; // o podrías lanzar una excepción personalizada
-        }
+        s3.putObject(request, RequestBody.fromBytes(bytes));
+
+        return "https://" + bucketName + ".s3.amazonaws.com/" +
+            URLEncoder.encode(nombreArchivo, StandardCharsets.UTF_8);
+    } catch (IOException e) {
+        e.printStackTrace();
+        return null;
     }
+}
+
 }

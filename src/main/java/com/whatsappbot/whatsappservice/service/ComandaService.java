@@ -1,7 +1,8 @@
 package com.whatsappbot.whatsappservice.service;
 
-import java.io.File;
-import java.io.FileOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 
 import org.springframework.stereotype.Service;
 
@@ -10,28 +11,22 @@ import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 public class ComandaService {
 
-    private static final String DIRECTORIO = "comandas"; // carpeta local donde se guardan
+    private final S3Service s3Service;
 
-    public void generarPDF(PedidoEntity pedido) {
+    public String generarPDF(PedidoEntity pedido) {
         try {
-            // Crear carpeta si no existe
-            File carpeta = new File(DIRECTORIO);
-            if (!carpeta.exists()) {
-                carpeta.mkdirs();
-            }
-
-            // Ruta del archivo
-            String archivo = DIRECTORIO + "/COMANDA_" + pedido.getPedidoId() + ".pdf";
-
-            // Crear documento
+            // Generar PDF en memoria
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
             Document documento = new Document();
-            PdfWriter.getInstance(documento, new FileOutputStream(archivo));
+            PdfWriter.getInstance(documento, baos);
             documento.open();
 
-            // Título
             documento.add(new Paragraph("🧾 COMANDA DEL BAR LÁCTEO"));
             documento.add(new Paragraph(" "));
             documento.add(new Paragraph("Pedido ID: " + pedido.getPedidoId()));
@@ -42,11 +37,17 @@ public class ComandaService {
 
             documento.close();
 
-            System.out.println("✅ Comanda PDF generada en: " + archivo);
+            // Subir a S3
+            InputStream input = new ByteArrayInputStream(baos.toByteArray());
+            String nombreArchivo = "comandas/COMANDA_" + pedido.getPedidoId() + ".pdf";
+            String urlPublica = s3Service.subirComanda(nombreArchivo, input);
 
+            System.out.println("✅ Comanda PDF generada en S3: " + urlPublica);
+            return urlPublica;
         } catch (Exception e) {
-            System.err.println("❌ Error al generar PDF de comanda:");
+            System.err.println("❌ Error al generar y subir PDF:");
             e.printStackTrace();
+            return null;
         }
     }
 }

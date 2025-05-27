@@ -53,8 +53,8 @@ public class PedidoControlador {
             PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, 1000);
             String link = pago.getUrl();
 
-watiService.enviarMensajeConTemplate(pedido.getTelefono(), "Cliente");
-
+String urlComanda = comandaService.generarPDF(pedido);
+watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
             return ResponseEntity.ok(Map.of(
                 "mensaje", "Pedido creado y link enviado por WhatsApp",
                 "pedidoId", pedidoId,
@@ -78,11 +78,16 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
             pedidoRepository.save(pedido);
 
             // ✅ Generar PDF de la comanda
-            comandaService.generarPDF(pedido);
+            
+String urlComanda = comandaService.generarPDF(pedido);
 
             // ✅ Enviar plantilla simple de confirmación por WhatsApp
-            watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
-
+if (urlComanda != null) {
+    watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
+} else {
+    log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
+    watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
+}
             log.info("✅ Pago confirmado para pedido {}", buyOrder);
             return ResponseEntity.ok("✅ Pago confirmado, comanda generada y mensaje enviado.");
         } else {
