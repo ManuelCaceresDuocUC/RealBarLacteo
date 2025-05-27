@@ -42,11 +42,10 @@ public class S3Service {
         byte[] bytes = contenido.readAllBytes();
 
         PutObjectRequest request = PutObjectRequest.builder()
-            .bucket(bucketName)
-            .key(nombreArchivo)
-            .contentType("application/pdf")
-            .acl("public-read")
-            .build();
+    .bucket(bucketName)
+    .key(nombreArchivo)
+    .contentType("application/pdf")
+    .build(); // ❌ sin .acl()
 
         s3.putObject(request, RequestBody.fromBytes(bytes));
 

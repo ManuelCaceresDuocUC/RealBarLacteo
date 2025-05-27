@@ -33,6 +33,8 @@ private String tenantId;
 
     // ✅ Enviar plantilla de confirmación de pedido
   public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkComanda) throws IOException {
+    telefono = telefono.startsWith("+") ? telefono : "+" + telefono;
+
     String url = watiApiUrl + "/api/v1/sendTemplateMessage";
 
     Map<String, Object> data = new HashMap<>();
