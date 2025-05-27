@@ -1,57 +1,62 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.util.Map;
+import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
+import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.service.ComandaService;
-import com.whatsappbot.whatsappservice.service.PedidoService;
-import com.whatsappbot.whatsappservice.service.WhatsAppService;
+import com.whatsappbot.whatsappservice.service.TransbankService;
+import com.whatsappbot.whatsappservice.service.WatiService;
 
+import cl.transbank.webpay.webpayplus.responses.WebpayPlusTransactionCommitResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @RestController
-@RequestMapping("/webpay")
+@RequestMapping("/api/pagos")
+@RequiredArgsConstructor
 public class NotificacionPagoController {
 
-    @Autowired
-    private WhatsAppService whatsAppService;
+    private final TransbankService transbankService;
+    private final PedidoRepository pedidoRepository;
+    private final ComandaService comandaService;
+    private final WatiService watiService;
 
-    @Autowired
-    private PedidoService pedidoService;
+    @GetMapping("/webpay-redireccion")
+    public ResponseEntity<String> procesarRedireccionWebpay(@RequestParam("token_ws") String token) {
+        try {
+            WebpayPlusTransactionCommitResponse response = transbankService.confirmarTransaccion(token);
+            String buyOrder = response.getBuyOrder();
 
-    @Autowired
-    private ComandaService comandaService;
+            Optional<PedidoEntity> pedidoOpt = pedidoRepository.findByPedidoId(buyOrder);
+            if (pedidoOpt.isEmpty()) {
+                return ResponseEntity.status(404).body("❌ Pedido no encontrado");
+            }
 
-    @PostMapping("/confirmacion")
-public ResponseEntity<String> recibirPago(@RequestBody Map<String, Object> payload) {
-    try {
-        String pedidoId = (String) payload.get("pedidoId");
-        System.out.println("👉 ID recibido: " + pedidoId);
+            PedidoEntity pedido = pedidoOpt.get();
+            pedido.setEstado("pagado");
+            pedidoRepository.save(pedido);
 
-        PedidoEntity pedido = pedidoService.buscarPedidoPorId(pedidoId);
-        if (pedido == null) {
-            System.out.println("❌ Pedido no encontrado");
-            return ResponseEntity.badRequest().body("❌ Pedido no encontrado: " + pedidoId);
+            comandaService.generarPDF(pedido);
+
+            String mensaje = "📥 *NUEVO PEDIDO PAGADO*\n"
+                    + "🆔 ID: " + pedido.getPedidoId() + "\n"
+                    + "📞 Teléfono: " + pedido.getTelefono() + "\n"
+                    + "📦 Detalle: " + pedido.getDetalle();
+
+            watiService.enviarMensajeTexto(pedido.getTelefono(), mensaje);
+
+            return ResponseEntity.ok("✅ ¡Pago confirmado y comanda enviada!");
+        } catch (Exception e) {
+            log.error("❌ Error al procesar redirección Webpay", e);
+            return ResponseEntity.status(500).body("❌ Error interno: " + e.getMessage());
         }
-
-        whatsAppService.enviarMensaje(pedido.getTelefono(),
-            "🎉 Gracias por tu pago. Tu pedido " + pedidoId + " está siendo preparado. 🧾");
-
-        comandaService.generarPDF(pedido);
-
-        pedido.setEstado("pagado");
-        pedidoService.guardarPedido(pedido);
-
-        return ResponseEntity.ok("✅ Pago confirmado y comanda PDF generada");
-
-    } catch (Exception e) {
-        System.out.println("❌ Excepción en el controlador:");
-        e.printStackTrace();
-        return ResponseEntity.badRequest().body("❌ Error al procesar la notificación");
     }
-}}
+}

@@ -48,7 +48,7 @@ public PagoResponseDTO generarLinkDePago(String buyOrder, int amount) {
         WebpayPlusTransactionCreateResponse response = transaction.create(buyOrder, sessionId, amount, returnUrl);
 
         // 🔧 Aseguramos que la URL enviada incluya el token
-        String redireccion = returnUrl + "/api/pagos/webpay-redireccion?token_ws=" + response.getToken();
+String redireccion = returnUrl + "/webpay-redireccion?token_ws=" + response.getToken();
 return new PagoResponseDTO(redireccion, response.getToken());
 
     } catch (Exception e) {
