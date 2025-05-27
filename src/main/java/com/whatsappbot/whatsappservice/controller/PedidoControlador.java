@@ -77,17 +77,14 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
             pedido.setEstado("pagado");
             pedidoRepository.save(pedido);
 
+            // ✅ Generar PDF de la comanda
             comandaService.generarPDF(pedido);
 
-            String mensaje = "📥 *NUEVO PEDIDO PAGADO*\n"
-                    + "🆔 ID: " + pedido.getPedidoId() + "\n"
-                    + "📞 Teléfono: " + pedido.getTelefono() + "\n"
-                    + "📦 Detalle: " + pedido.getDetalle();
+            // ✅ Enviar plantilla simple de confirmación por WhatsApp
+            watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
 
-            watiService.enviarMensajeTexto(pedido.getTelefono(), mensaje);
             log.info("✅ Pago confirmado para pedido {}", buyOrder);
-
-            return ResponseEntity.ok("✅ Pago confirmado, comanda generada y aviso enviado.");
+            return ResponseEntity.ok("✅ Pago confirmado, comanda generada y mensaje enviado.");
         } else {
             return ResponseEntity.status(404).body("❌ Pedido no encontrado");
         }
@@ -96,6 +93,8 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
         return ResponseEntity.status(500).body("❌ Error interno: " + e.getMessage());
     }
 }
+
+
 /*@GetMapping("/webpay-redireccion")
 public ResponseEntity<String> redirigirAWebpay(@RequestParam("token_ws") String token) {
     String html = """
