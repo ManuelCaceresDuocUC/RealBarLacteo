@@ -5,7 +5,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -66,38 +65,38 @@ public class PedidoControlador {
         }
     }
 
-@GetMapping("/confirmacion")
-    public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
-        try {
-            WebpayPlusTransactionCommitResponse response = transbankService.confirmarTransaccion(token);
-            String buyOrder = response.getBuyOrder();
+@PostMapping("/confirmacion")
+public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
+    try {
+        WebpayPlusTransactionCommitResponse response = transbankService.confirmarTransaccion(token);
+        String buyOrder = response.getBuyOrder();
 
-            Optional<PedidoEntity> pedidoOpt = pedidoRepository.findByPedidoId(buyOrder);
-            if (pedidoOpt.isPresent()) {
-                PedidoEntity pedido = pedidoOpt.get();
-                pedido.setEstado("pagado");
-                pedidoRepository.save(pedido);
+        Optional<PedidoEntity> pedidoOpt = pedidoRepository.findByPedidoId(buyOrder);
+        if (pedidoOpt.isPresent()) {
+            PedidoEntity pedido = pedidoOpt.get();
+            pedido.setEstado("pagado");
+            pedidoRepository.save(pedido);
 
-                comandaService.generarPDF(pedido);
+            comandaService.generarPDF(pedido);
 
-                String mensaje = "📥 *NUEVO PEDIDO PAGADO*\n"
-                        + "🆔 ID: " + pedido.getPedidoId() + "\n"
-                        + "📞 Teléfono: " + pedido.getTelefono() + "\n"
-                        + "📦 Detalle: " + pedido.getDetalle();
+            String mensaje = "📥 *NUEVO PEDIDO PAGADO*\n"
+                    + "🆔 ID: " + pedido.getPedidoId() + "\n"
+                    + "📞 Teléfono: " + pedido.getTelefono() + "\n"
+                    + "📦 Detalle: " + pedido.getDetalle();
 
-                watiService.enviarMensajeTexto(pedido.getTelefono(), mensaje);
-                log.info("✅ Pago confirmado para pedido {}", buyOrder);
+            watiService.enviarMensajeTexto(pedido.getTelefono(), mensaje);
+            log.info("✅ Pago confirmado para pedido {}", buyOrder);
 
-                return ResponseEntity.ok("Pago confirmado, comanda generada y aviso enviado.");
-            } else {
-                return ResponseEntity.status(404).body("Pedido no encontrado");
-            }
-        } catch (Exception e) {
-            log.error("❌ Error interno al confirmar pago", e);
-            return ResponseEntity.status(500).body("Error interno: " + e.getMessage());
+            return ResponseEntity.ok("✅ Pago confirmado, comanda generada y aviso enviado.");
+        } else {
+            return ResponseEntity.status(404).body("❌ Pedido no encontrado");
         }
+    } catch (Exception e) {
+        log.error("❌ Error interno al confirmar pago", e);
+        return ResponseEntity.status(500).body("❌ Error interno: " + e.getMessage());
     }
-@GetMapping("/webpay-redireccion")
+}
+/*@GetMapping("/webpay-redireccion")
 public ResponseEntity<String> redirigirAWebpay(@RequestParam("token_ws") String token) {
     String html = """
         <html>
@@ -117,5 +116,5 @@ public ResponseEntity<String> redirigirAWebpay(@RequestParam("token_ws") String 
     return ResponseEntity.ok()
             .header("Content-Type", "text/html")
             .body(html);
-}
+}*/
 }
