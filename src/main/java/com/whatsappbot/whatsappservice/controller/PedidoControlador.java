@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -64,8 +65,7 @@ public class PedidoControlador {
             return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
         }
     }
-
-@PostMapping("/confirmacion")
+@RequestMapping(value = "/confirmacion", method = {RequestMethod.GET, RequestMethod.POST})
 public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
     try {
         WebpayPlusTransactionCommitResponse response = transbankService.confirmarTransaccion(token);
