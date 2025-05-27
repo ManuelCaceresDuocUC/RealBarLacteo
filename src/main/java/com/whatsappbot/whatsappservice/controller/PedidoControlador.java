@@ -53,7 +53,7 @@ public class PedidoControlador {
             PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, 1000);
             String link = pago.getUrl();
 
-            watiService.enviarMensajeConTemplate(telefono, pedidoId, link);
+watiService.enviarMensajeConTemplate(pedido.getTelefono(), "Cliente");
 
             return ResponseEntity.ok(Map.of(
                 "mensaje", "Pedido creado y link enviado por WhatsApp",

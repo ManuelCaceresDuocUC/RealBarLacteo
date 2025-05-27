@@ -32,20 +32,19 @@ private String tenantId;
     private final ObjectMapper mapper = new ObjectMapper();
 
     // ✅ Enviar plantilla de confirmación de pedido
-    public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkPago) throws IOException {
+  public void enviarMensajeConTemplate(String telefono, String nombreCliente) throws IOException {
     String url = watiApiUrl + "/api/v1/sendTemplateMessage";
 
     Map<String, Object> data = new HashMap<>();
-    data.put("template_name", "confirmacion_pedido_link");
-    data.put("broadcast_name", "confirmacion_pedido_link");
+    data.put("template_name", "confirmacion_pedido");
+    data.put("broadcast_name", "confirmacion_pedido");
     data.put("phone_number", telefono);
 
     List<Map<String, String>> parametros = new ArrayList<>();
-    parametros.add(Map.of("name", "1", "value", pedidoId));
-    parametros.add(Map.of("name", "2", "value", linkPago));
+    parametros.add(Map.of("name", "1", "value", nombreCliente));
     data.put("parameters", parametros);
 
-    enviarPostWati(url, data, "plantilla de confirmación con link");
+    enviarPostWati(url, data, "plantilla de confirmación");
 }
     // ✅ Enviar plantilla de ayuda automática
     public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
