@@ -47,11 +47,10 @@ public PagoResponseDTO generarLinkDePago(String buyOrder, int amount) {
         String sessionId = UUID.randomUUID().toString();
 
         // Esta URL debe estar registrada en tu cuenta Transbank de integración
-        WebpayPlusTransactionCreateResponse response = transaction.create(buyOrder, sessionId, amount, returnUrl);
-
-        // Retornamos directamente el link oficial de Transbank
-        return new PagoResponseDTO(response.getUrl(), response.getToken());
-
+WebpayPlusTransactionCreateResponse response = transaction.create(buyOrder, sessionId, amount, returnUrl);
+String urlConToken = response.getUrl() + "?token_ws=" + response.getToken();
+return new PagoResponseDTO(urlConToken, response.getToken());
+        
     } catch (Exception e) {
         log.error("❌ Error al crear la transacción Webpay: {}", e.getMessage(), e);
         throw new RuntimeException("Error al generar el link de pago con Transbank");
