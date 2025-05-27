@@ -97,4 +97,25 @@ public class PedidoControlador {
             return ResponseEntity.status(500).body("Error interno: " + e.getMessage());
         }
     }
+@GetMapping("/webpay-redireccion")
+public ResponseEntity<String> redirigirAWebpay(@RequestParam("token_ws") String token) {
+    String html = """
+        <html>
+        <head><title>Redireccionando a WebPay...</title></head>
+        <body onload="document.forms[0].submit()">
+            <form method="POST" action="https://webpay3gint.transbank.cl/webpayserver/initTransaction">
+                <input type="hidden" name="token_ws" value="%s" />
+                <noscript>
+                    <p>Tu navegador no soporta redirección automática. Haz clic en el botón.</p>
+                    <button type="submit">Ir a WebPay</button>
+                </noscript>
+            </form>
+        </body>
+        </html>
+        """.formatted(token);
+
+    return ResponseEntity.ok()
+            .header("Content-Type", "text/html")
+            .body(html);
+}
 }
