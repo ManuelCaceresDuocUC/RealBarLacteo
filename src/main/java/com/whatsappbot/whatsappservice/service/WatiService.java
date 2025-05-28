@@ -34,55 +34,38 @@ public class WatiService {
 
     // ✅ Enviar plantilla de confirmación con link
     public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkComanda) throws IOException {
-        if (!telefono.startsWith("+")) {
-            telefono = "+" + telefono;
-        }
+    telefono = telefono.replace("+", ""); // Limpieza de formato
 
-        String url = watiApiUrl + "/api/v1/sendTemplateMessage";
+    String url = watiApiUrl + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("template_name", "confirmacion_pedido_link");
-        data.put("broadcast_name", "confirmacion_pedido_link");
-        data.put("phone_number", telefono);
+    Map<String, Object> data = new HashMap<>();
+    data.put("template_name", "confirmacion_pedido_link");
+    data.put("broadcast_name", "confirmacion_pedido_link");
 
-        List<Map<String, String>> parametros = new ArrayList<>();
-        parametros.add(Map.of("name", "1", "value", pedidoId));
-        parametros.add(Map.of("name", "2", "value", linkComanda));
-        data.put("parameters", parametros);
+    List<Map<String, String>> parametros = new ArrayList<>();
+    parametros.add(Map.of("name", "1", "value", pedidoId));
+    parametros.add(Map.of("name", "2", "value", linkComanda));
+    data.put("parameters", parametros);
 
-        enviarPostWati(url, data, "plantilla de confirmación con link");
-    }
+    enviarPostWati(url, data, "plantilla de confirmación con link");
+}
 
     // ✅ Enviar plantilla de ayuda automática
     public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
-        String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+    telefono = telefono.replace("+", "");
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("template_name", "respuesta_ayuda1");
-        data.put("broadcast_name", "respuesta_ayuda1");
+    String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
-        List<Map<String, String>> parametros = new ArrayList<>();
-        parametros.add(Map.of("name", "1", "value", nombre));
-        data.put("parameters", parametros);
+    Map<String, Object> data = new HashMap<>();
+    data.put("template_name", "respuesta_ayuda1");
+    data.put("broadcast_name", "respuesta_ayuda1");
 
-        String json = mapper.writeValueAsString(data);
+    List<Map<String, String>> parametros = new ArrayList<>();
+    parametros.add(Map.of("name", "1", "value", nombre));
+    data.put("parameters", parametros);
 
-        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
-        Request request = new Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .addHeader("Content-Type", "application/json")
-                .post(body)
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new IOException("❌ Error al enviar plantilla de ayuda WATI: Código " + response.code() + " - " + response.body().string());
-            } else {
-                System.out.println("📨 Plantilla de ayuda enviada correctamente");
-            }
-        }
-    }
+    enviarPostWati(url, data, "plantilla de ayuda");
+}
 
     // ✅ Enviar mensaje de texto libre (requiere sesión iniciada)
     public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
@@ -170,22 +153,20 @@ public class WatiService {
     }
 
     public void enviarTemplateConfirmacionSimple(String telefono, String nombre) throws IOException {
-        if (!telefono.startsWith("+")) {
-            telefono = "+" + telefono;
-        }
+    telefono = telefono.replace("+", "");
 
-        String url = watiApiUrl + "/api/v1/sendTemplateMessage";
+    String url = watiApiUrl + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("template_name", "confirmacion_pedido");
-        data.put("broadcast_name", "confirmacion_pedido");
-        data.put("phone_number", telefono);
+    Map<String, Object> data = new HashMap<>();
+    data.put("template_name", "confirmacion_pedido");
+    data.put("broadcast_name", "confirmacion_pedido");
 
-        List<Map<String, String>> parametros = new ArrayList<>();
-        parametros.add(Map.of("name", "1", "value", nombre));
-        data.put("parameters", parametros);
+    List<Map<String, String>> parametros = new ArrayList<>();
+    parametros.add(Map.of("name", "1", "value", nombre));
+    data.put("parameters", parametros);
 
-        enviarPostWati(url, data, "confirmación simple");
-    }
+    enviarPostWati(url, data, "confirmación simple");
+}
+
     
 }
