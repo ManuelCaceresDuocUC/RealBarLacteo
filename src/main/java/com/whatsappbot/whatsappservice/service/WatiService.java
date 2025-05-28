@@ -33,14 +33,15 @@ private String tenantId;
 
     // ✅ Enviar plantilla de confirmación de pedido
   public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkComanda) throws IOException {
-    telefono = telefono.startsWith("+") ? telefono : "+" + telefono;
+    // ✅ Formatear número quitando el símbolo '+' si lo tiene
+    String numeroFormateado = telefono.replace("+", "");
 
     String url = watiApiUrl + "/api/v1/sendTemplateMessage";
 
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "confirmacion_pedido_link");
     data.put("broadcast_name", "confirmacion_pedido_link");
-    data.put("phone_number", telefono);
+    data.put("phone_number", numeroFormateado); // 👈 aquí el número sin '+'
 
     List<Map<String, String>> parametros = new ArrayList<>();
     parametros.add(Map.of("name", "1", "value", pedidoId));
@@ -52,7 +53,9 @@ private String tenantId;
 
     // ✅ Enviar plantilla de ayuda automática
     public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
-    String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+            String numeroFormateado = telefono.replace("+", ""); // 👈
+
+    String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + numeroFormateado;
 
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "respuesta_ayuda1");
@@ -82,8 +85,9 @@ private String tenantId;
 }
     // ✅ Enviar mensaje de texto libre (requiere sesión iniciada)
     public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
-        String url = watiApiUrl + "/api/v1/sendSessionMessage?whatsappNumber=" + telefono;
+String numeroFormateado = telefono.replace("+", ""); // 👈
 
+    String url = watiApiUrl + "/api/v1/sendSessionMessage?whatsappNumber=" + numeroFormateado;
         Map<String, String> data = new HashMap<>();
         data.put("message", mensaje);
 
@@ -134,8 +138,9 @@ private String tenantId;
 }
 
     public void enviarMensajePagoEstatico(String telefono, Double total, String linkPago) throws IOException {
-    String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+String numeroFormateado = telefono.replace("+", ""); // 👈
 
+    String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + numeroFormateado;
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "pago_estatico");
     data.put("broadcast_name", "pago_estatico");
@@ -166,12 +171,13 @@ private String tenantId;
     }
 }
 public void enviarTemplateConfirmacionSimple(String telefono, String nombre) throws IOException {
-    String url = watiApiUrl + "/api/v1/sendTemplateMessage";
+String numeroFormateado = telefono.replace("+", ""); // 👈
 
+    String url = watiApiUrl + "/api/v1/sendTemplateMessage";
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "confirmacion_pedido");
     data.put("broadcast_name", "confirmacion_pedido");
-    data.put("phone_number", telefono);
+    data.put("phone_number", numeroFormateado); // 👈 importante
 
     List<Map<String, String>> parametros = new ArrayList<>();
     parametros.add(Map.of("name", "1", "value", nombre));
