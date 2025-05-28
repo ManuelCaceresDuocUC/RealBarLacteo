@@ -50,6 +50,12 @@ public class WebhookController {
                 String detalle = (String) resultado.get("detalle");
                 double montoTotal = (double) resultado.get("total");
 
+                // Validación opcional
+                if (montoTotal <= 0) {
+                    log.warn("❌ Monto inválido para generar transacción: {}", montoTotal);
+                    return ResponseEntity.badRequest().body("Monto inválido");
+                }
+
                 // Guardar pedido como pendiente
                 PedidoEntity pedido = new PedidoEntity();
                 pedido.setPedidoId(pedidoId);
@@ -60,12 +66,12 @@ public class WebhookController {
 
                 log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
 
-                // Generar link de pago con el monto real
+                // Generar link de pago
                 int monto = (int) montoTotal;
                 PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                 String linkPago = pago.getUrl();
 
-                // Enviar plantilla por WhatsApp con el link generado
+                // Enviar plantilla con el link generado
                 watiService.enviarMensajePagoEstatico(telefono, montoTotal, linkPago);
             }
 
@@ -86,33 +92,26 @@ public class WebhookController {
         return ResponseEntity.ok().build();
     }
 
-    // 🔧 Construir detalle y total desde el catálogo
     private Map<String, Object> construirDetalleYTotalDesdeCatalogo(JsonNode orderNode) {
-    StringBuilder detalle = new StringBuilder();
-    double total = 0.0;
+        StringBuilder detalle = new StringBuilder();
+        double total = 0.0;
 
-    if (orderNode != null && orderNode.has("products")) {
-        for (JsonNode producto : orderNode.get("products")) {
-            String nombre = producto.path("name").asText("Producto desconocido");
-            int cantidad = producto.path("quantity").asInt(1);
-            double precio = producto.path("price").asDouble(1000); // Fallback si no viene
+        if (orderNode != null && orderNode.has("products")) {
+            for (JsonNode producto : orderNode.get("products")) {
+                String nombre = producto.path("name").asText("Producto desconocido");
+                int cantidad = producto.path("quantity").asInt(1);
+                double precio = producto.path("price").asDouble(1000); // fallback
 
-            total += cantidad * precio;
-
-            detalle.append("- ")
-                   .append(cantidad)
-                   .append(" x ")
-                   .append(nombre)
-                   .append(" ($").append((int) precio).append(")\n");
+                total += cantidad * precio;
+                detalle.append("- ").append(cantidad).append(" x ").append(nombre).append("\n");
+            }
+        } else {
+            detalle.append("Sin productos listados.");
         }
-    } else {
-        detalle.append("Sin productos listados.");
+
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("detalle", detalle.toString().trim());
+        resultado.put("total", total);
+        return resultado;
     }
-
-    Map<String, Object> resultado = new HashMap<>();
-    resultado.put("detalle", detalle.toString().trim());
-    resultado.put("total", total);
-    return resultado;
-}
-
 }
