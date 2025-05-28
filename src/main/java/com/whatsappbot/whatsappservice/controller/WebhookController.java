@@ -1,5 +1,7 @@
 package com.whatsappbot.whatsappservice.controller;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -41,9 +43,12 @@ public class WebhookController {
 
             // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
-                int montoFijo = 1000; // puedes ajustar el monto o dejarlo como placeholder
                 String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
-                String detalle = "Pedido desde catálogo";
+                JsonNode orderNode = payload.path("order");
+
+                Map<String, Object> resultado = construirDetalleYTotalDesdeCatalogo(orderNode);
+                String detalle = (String) resultado.get("detalle");
+                double montoTotal = (double) resultado.get("total");
 
                 // Guardar pedido como pendiente
                 PedidoEntity pedido = new PedidoEntity();
@@ -55,12 +60,13 @@ public class WebhookController {
 
                 log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
 
-                // Generar link de pago real con Transbank
-                PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, montoFijo);
+                // Generar link de pago con el monto real
+                int monto = (int) montoTotal;
+                PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                 String linkPago = pago.getUrl();
 
                 // Enviar plantilla por WhatsApp con el link generado
-                watiService.enviarMensajePagoEstatico(telefono, (double) montoFijo, linkPago);
+                watiService.enviarMensajePagoEstatico(telefono, montoTotal, linkPago);
             }
 
             // 💬 Mensaje de texto: ayuda
@@ -79,4 +85,34 @@ public class WebhookController {
 
         return ResponseEntity.ok().build();
     }
+
+    // 🔧 Construir detalle y total desde el catálogo
+    private Map<String, Object> construirDetalleYTotalDesdeCatalogo(JsonNode orderNode) {
+    StringBuilder detalle = new StringBuilder();
+    double total = 0.0;
+
+    if (orderNode != null && orderNode.has("products")) {
+        for (JsonNode producto : orderNode.get("products")) {
+            String nombre = producto.path("name").asText("Producto desconocido");
+            int cantidad = producto.path("quantity").asInt(1);
+            double precio = producto.path("price").asDouble(1000); // Fallback si no viene
+
+            total += cantidad * precio;
+
+            detalle.append("- ")
+                   .append(cantidad)
+                   .append(" x ")
+                   .append(nombre)
+                   .append(" ($").append((int) precio).append(")\n");
+        }
+    } else {
+        detalle.append("Sin productos listados.");
+    }
+
+    Map<String, Object> resultado = new HashMap<>();
+    resultado.put("detalle", detalle.toString().trim());
+    resultado.put("total", total);
+    return resultado;
+}
+
 }
