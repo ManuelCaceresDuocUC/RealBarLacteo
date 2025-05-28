@@ -45,7 +45,9 @@ public class PedidoControlador {
 
         String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
         log.info("📝 Recibido nuevo pedido: telefono={}, detalle={}", telefono, detalle);
-
+        if (!telefono.startsWith("+")) {
+            telefono = "+" + telefono;
+                }
         try {
             PedidoEntity pedido = new PedidoEntity(pedidoId, telefono, detalle);
             pedidoRepository.save(pedido);
@@ -81,6 +83,7 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
             
 String urlComanda = comandaService.generarPDF(pedido);
 System.out.println("🔗 URL comanda generada: " + urlComanda);
+System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
 
             // ✅ Enviar plantilla simple de confirmación por WhatsApp
 if (urlComanda != null) {
