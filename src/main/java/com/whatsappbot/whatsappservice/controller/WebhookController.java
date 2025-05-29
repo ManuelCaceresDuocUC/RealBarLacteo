@@ -1,7 +1,8 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,8 +14,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.dto.ProductoCarritoDTO;
+import com.whatsappbot.whatsappservice.model.PedidoEntity;
+import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.service.PdfService;
-import com.whatsappbot.whatsappservice.service.PedidoService;
 import com.whatsappbot.whatsappservice.service.S3Service;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
@@ -29,7 +31,7 @@ import lombok.extern.slf4j.Slf4j;
 public class WebhookController {
 
     private final WatiService watiService;
-    private final PedidoService pedidoService;
+    private final PedidoRepository pedidoRepository;
     private final TransbankService transbankService;
     private final PdfService pdfService;
     private final S3Service s3Service;
@@ -44,40 +46,57 @@ public class WebhookController {
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
 
+            // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
-                // 🔄 Obtener carrito real desde WATI
-                JsonNode atributos = watiService.obtenerAtributosContacto(telefono);
-                JsonNode lastCartItems = atributos.path("contact").path("customParams").path("last_cart_items");
-                double total = atributos.path("contact").path("customParams").path("last_cart_total_value").asDouble(0.0);
+                JsonNode productsNode = payload.path("order").path("products");
 
-                if (!lastCartItems.isArray() || lastCartItems.size() == 0) {
-                    log.warn("⚠️ Carrito vacío para el número {}", telefono);
+                if (!productsNode.isArray() || productsNode.size() == 0) {
+                    log.warn("⚠️ Pedido recibido sin productos");
                     return ResponseEntity.ok().build();
                 }
 
-                List<ProductoCarritoDTO> productos = Arrays.asList(
-                    objectMapper.treeToValue(lastCartItems, ProductoCarritoDTO[].class)
-                );
+                List<ProductoCarritoDTO> productos = new ArrayList<>();
+                double total = 0;
+                StringBuilder detalle = new StringBuilder();
 
-                // 🛒 Crear pedido y comanda
-                String pedidoId = pedidoService.crearPedidoConDetalle(telefono, productos, total);
-                byte[] pdf = pdfService.generarComandaPDF(pedidoId, productos, total);
-                String urlComanda = s3Service.subirComanda(pedidoId, pdf);
+                for (JsonNode productoNode : productsNode) {
+                    ProductoCarritoDTO producto = objectMapper.treeToValue(productoNode, ProductoCarritoDTO.class);
+                    productos.add(producto);
 
-                // 💳 Generar link de pago
+                    double subtotal = producto.getPrice() * producto.getQuantity();
+                    total += subtotal;
+                    detalle.append(String.format("- %dx %s\n", producto.getQuantity(), producto.getName()));
+                }
+
+                String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+
+                // Guardar pedido en base de datos
+                PedidoEntity pedido = new PedidoEntity();
+                pedido.setPedidoId(pedidoId);
+                pedido.setTelefono(telefono);
+                pedido.setDetalle(detalle.toString().trim());
+                pedido.setEstado("pendiente");
+                pedidoRepository.save(pedido);
+
+                log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
+
+                // Generar link de pago
                 int monto = (int) Math.round(total);
                 PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                 String linkPago = pago.getUrl();
 
-                // 📤 Enviar mensajes
+                // Generar PDF
+                byte[] pdf = pdfService.generarComandaPDF(pedidoId, productos, total);
+                String urlComanda = s3Service.subirComanda(pedidoId, pdf);
+
+                // Enviar comanda y link de pago
                 watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
                 watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
             }
 
+            // 💬 Mensaje de texto tipo "ayuda"
             else if ("text".equalsIgnoreCase(tipo)) {
                 String texto = payload.path("text").asText("").toLowerCase();
-                log.info("📥 Mensaje de texto: {} desde {}", texto, telefono);
-
                 if (texto.contains("ayuda")) {
                     watiService.enviarTemplateAyuda(telefono, nombre);
                 }
