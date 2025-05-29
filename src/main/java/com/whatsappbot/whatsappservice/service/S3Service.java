@@ -41,12 +41,10 @@ public class S3Service {
             System.out.println("📤 Subiendo a S3: bucket=" + bucketName + ", archivo=" + nombreArchivo);
 
             PutObjectRequest request = PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(nombreArchivo + ".pdf")
-                .contentType("application/pdf")
-                .acl("public-read") // 🔓 Hace público el archivo
-                .build();
-
+    .bucket(bucketName)
+    .key(nombreArchivo + ".pdf")
+    .contentType("application/pdf")
+    .build(); 
             s3.putObject(request, RequestBody.fromBytes(contenido));
 
             String url = "https://" + bucketName + ".s3.amazonaws.com/" +
