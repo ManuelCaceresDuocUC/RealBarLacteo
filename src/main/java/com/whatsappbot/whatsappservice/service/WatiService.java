@@ -173,6 +173,7 @@ public JsonNode obtenerAtributosContacto(String telefono) throws IOException {
     String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
 
     System.out.println("🌐 Consultando atributos WATI en URL: " + url);
+System.out.println("📞 Consultando atributos para teléfono: " + telefono);
 
     Request request = new Request.Builder()
         .url(url)
