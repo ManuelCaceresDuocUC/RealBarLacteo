@@ -36,24 +36,25 @@ public class PedidoService {
     public String crearPedidoConDetalle(String telefono, List<ProductoCarritoDTO> productos, double total) {
     String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
 
-    StringBuilder detalle = new StringBuilder();
-    for (ProductoCarritoDTO producto : productos) {
-        detalle.append("- ")
-               .append(producto.getQuantity())
-               .append(" x ")
-               .append(producto.getName())
-               .append("\n");
-    }
+            StringBuilder detalle = new StringBuilder();
+            for (ProductoCarritoDTO producto : productos) {
+                detalle.append("- ")
+                    .append(producto.getQuantity())
+                    .append(" x ")
+                    .append(producto.getName())
+                    .append("\n");
+            }
 
-    PedidoEntity pedido = new PedidoEntity();
-    pedido.setPedidoId(pedidoId);
-    pedido.setTelefono(telefono);
-    pedido.setDetalle(detalle.toString().trim());
-    pedido.setEstado("pendiente");
+            PedidoEntity pedido = new PedidoEntity();
+            pedido.setPedidoId(pedidoId);
+            pedido.setTelefono(telefono);
+            pedido.setDetalle(detalle.toString().trim());
+            pedido.setEstado("pendiente");
 
-    pedidoRepository.save(pedido);
+            pedidoRepository.save(pedido);
 
-    log.info("🛒 Pedido creado con ID: {}", pedidoId);
-    return pedidoId;
+            log.info("🛒 Pedido creado con ID: {}", pedidoId);
+            return pedidoId;
 }
+
 }
