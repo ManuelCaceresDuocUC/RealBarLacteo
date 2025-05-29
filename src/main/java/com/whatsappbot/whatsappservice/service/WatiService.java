@@ -55,7 +55,7 @@ public class WatiService {
     public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
     telefono = telefono.replace("+", "");
 
-String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
+String url = watiApiUrl + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "respuesta_ayuda1");
@@ -122,7 +122,7 @@ String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" +
     }
 
     public void enviarMensajePagoEstatico(String telefono, Double total, String linkPago) throws IOException {
-        String url = "https://live-mt-server.wati.io" +"/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+String url = watiApiUrl + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
         Map<String, Object> data = new HashMap<>();
         data.put("template_name", "pago_estatico");
@@ -170,10 +170,11 @@ String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" +
 }
 public JsonNode obtenerAtributosContacto(String telefono) throws IOException {
     telefono = telefono.replace("+", "").trim();
+
     String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
 
-    System.out.println("🌐 Consultando atributos WATI en URL: " + url);
-System.out.println("📞 Consultando atributos para teléfono: " + telefono);
+    System.out.println("🌐 URL de consulta WATI: " + url);
+    System.out.println("📞 Consultando atributos para teléfono: " + telefono);
 
     Request request = new Request.Builder()
         .url(url)
@@ -196,6 +197,7 @@ System.out.println("📞 Consultando atributos para teléfono: " + telefono);
         return root;
     }
 }
+
 
 
     
