@@ -169,8 +169,10 @@ public class WatiService {
     enviarPostWati(url, data, "confirmación simple");
 }
 public JsonNode obtenerAtributosContacto(String telefono) throws IOException {
-    telefono = telefono.replace("+", "");
+    telefono = telefono.replace("+", "").trim();
     String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
+
+    System.out.println("🌐 Consultando atributos WATI en URL: " + url);
 
     Request request = new Request.Builder()
         .url(url)
@@ -179,16 +181,21 @@ public JsonNode obtenerAtributosContacto(String telefono) throws IOException {
         .build();
 
     try (Response response = client.newCall(request).execute()) {
+        String responseBody = response.body() != null ? response.body().string() : "sin cuerpo";
+
         if (!response.isSuccessful()) {
+            System.err.println("❌ Error al consultar WATI: código " + response.code());
+            System.err.println("📦 Respuesta de error: " + responseBody);
             throw new IOException("❌ Error al consultar atributos WATI: " + response.code());
         }
 
-        String body = response.body().string();
-        JsonNode root = mapper.readTree(body);
-        System.out.println("🔍 Respuesta atributos contacto: " + root.toPrettyString());
+        JsonNode root = mapper.readTree(responseBody);
+        System.out.println("✅ Atributos obtenidos correctamente: " + root.toPrettyString());
+
         return root;
     }
 }
+
 
     
 }
