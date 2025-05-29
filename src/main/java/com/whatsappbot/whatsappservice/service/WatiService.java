@@ -55,7 +55,7 @@ public class WatiService {
     public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
     telefono = telefono.replace("+", "");
 
-    String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
 
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "respuesta_ayuda1");
@@ -122,7 +122,7 @@ public class WatiService {
     }
 
     public void enviarMensajePagoEstatico(String telefono, Double total, String linkPago) throws IOException {
-        String url = "https://live-mt-server.wati.io/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+        String url = "https://live-mt-server.wati.io" +"/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
         Map<String, Object> data = new HashMap<>();
         data.put("template_name", "pago_estatico");
