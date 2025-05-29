@@ -82,6 +82,7 @@ public ResponseEntity<?> recibirWebhook(@RequestBody JsonNode payload) {
         Response response = client.newCall(request).execute();
         String responseBody = response.body().string();
         JsonNode detalle = mapper.readTree(responseBody);
+        System.out.println("📦 Detalle del pedido: " + detalle.toPrettyString());
 
         JsonNode productosJson = detalle.path("orderDetails");
         double total = detalle.path("total").asDouble();
@@ -100,7 +101,7 @@ if (total <= 0) {
         Response responseInfo = clientInfo.newCall(requestInfo).execute();
         String responseBodyInfo = responseInfo.body().string();
         JsonNode contacto = mapper.readTree(responseBodyInfo);
-
+        
         JsonNode atributos = contacto.path("contact").path("customParams");
         for (JsonNode atributo : atributos) {
             if ("last_cart_total_value".equals(atributo.path("name").asText())) {
