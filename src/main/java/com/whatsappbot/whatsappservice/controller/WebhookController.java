@@ -87,9 +87,39 @@ public ResponseEntity<?> recibirWebhook(@RequestBody JsonNode payload) {
         double total = detalle.path("total").asDouble();
 System.out.println("💰 Total del pedido extraído: " + total);
 
+// Si el total es 0, intentar obtenerlo desde el contacto WATI
 if (total <= 0) {
-    throw new RuntimeException("El monto total es inválido: " + total);
+    try {
+        OkHttpClient clientInfo = new OkHttpClient();
+        String urlInfo = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
+        Request requestInfo = new Request.Builder()
+            .url(urlInfo)
+            .addHeader("Authorization", "Bearer " + apiKey)
+            .build();
+
+        Response responseInfo = clientInfo.newCall(requestInfo).execute();
+        String responseBodyInfo = responseInfo.body().string();
+        JsonNode contacto = mapper.readTree(responseBodyInfo);
+
+        JsonNode atributos = contacto.path("contact").path("customParams");
+        for (JsonNode atributo : atributos) {
+            if ("last_cart_total_value".equals(atributo.path("name").asText())) {
+                String valorJson = atributo.path("value").asText(); // ejemplo: {"Total":1500.0,"Currency":"CLP"}
+                JsonNode valorNode = mapper.readTree(valorJson);
+                total = valorNode.path("Total").asDouble();
+                System.out.println("💰 Total obtenido desde atributo: " + total);
+                break;
+            }
+        }
+    } catch (Exception ex) {
+        System.err.println("⚠️ No se pudo obtener el total desde atributos del contacto: " + ex.getMessage());
+    }
 }
+
+if (total <= 0) {
+    throw new RuntimeException("El monto total es inválido incluso después de intentar desde el contacto: " + total);
+}
+
 int monto = (int) Math.round(total);
         List<ProductoCarritoDTO> productos = new ArrayList<>();
         for (JsonNode productoJson : productosJson) {
