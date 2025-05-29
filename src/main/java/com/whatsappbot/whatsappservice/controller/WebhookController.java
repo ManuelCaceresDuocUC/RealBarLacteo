@@ -43,20 +43,26 @@ public class WebhookController {
 
             // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
-                String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                 JsonNode orderNode = payload.path("order");
+
+                // Validar si hay productos
+                if (orderNode == null || !orderNode.has("products") || !orderNode.get("products").isArray() || orderNode.get("products").isEmpty()) {
+                    log.warn("⚠️ Pedido sin productos, no se procesa.");
+                    return ResponseEntity.ok().build();
+                }
 
                 Map<String, Object> resultado = construirDetalleYTotalDesdeCatalogo(orderNode);
                 String detalle = (String) resultado.get("detalle");
-                double montoTotal = (double) resultado.get("total");
+                double total = (double) resultado.get("total");
 
-                // Validación opcional
-                if (montoTotal <= 0) {
-                    log.warn("❌ Monto inválido para generar transacción: {}", montoTotal);
-                    return ResponseEntity.badRequest().body("Monto inválido");
+                if (total <= 0) {
+                    log.warn("❌ Monto inválido para generar transacción: {}", total);
+                    return ResponseEntity.ok().build();
                 }
 
-                // Guardar pedido como pendiente
+                String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+
+                // Guardar pedido en la base de datos
                 PedidoEntity pedido = new PedidoEntity();
                 pedido.setPedidoId(pedidoId);
                 pedido.setTelefono(telefono);
@@ -67,15 +73,15 @@ public class WebhookController {
                 log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
 
                 // Generar link de pago
-                int monto = (int) montoTotal;
+                int monto = (int) Math.round(total);
                 PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                 String linkPago = pago.getUrl();
 
-                // Enviar plantilla con el link generado
-                watiService.enviarMensajePagoEstatico(telefono, montoTotal, linkPago);
+                // Enviar mensaje de pago
+                watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
             }
 
-            // 💬 Mensaje de texto: ayuda
+            // 💬 Mensaje de texto tipo "ayuda"
             else if ("text".equalsIgnoreCase(tipo)) {
                 String texto = payload.path("text").asText("").toLowerCase();
                 log.info("📥 Mensaje de texto: {} desde {}", texto, telefono);
@@ -92,6 +98,7 @@ public class WebhookController {
         return ResponseEntity.ok().build();
     }
 
+    // Método para construir detalle y total del carrito
     private Map<String, Object> construirDetalleYTotalDesdeCatalogo(JsonNode orderNode) {
         StringBuilder detalle = new StringBuilder();
         double total = 0.0;
