@@ -43,8 +43,8 @@ public class WebhookController {
 
             // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
-                JsonNode orderNode = payload.path("order");
-
+                        JsonNode orderNode = payload.path("order");
+                        log.info("📦 Nodo order: {}", orderNode);
                 // Validar si hay productos
                 if (orderNode == null || !orderNode.has("products") || !orderNode.get("products").isArray() || orderNode.get("products").isEmpty()) {
                     log.warn("⚠️ Pedido sin productos, no se procesa.");
