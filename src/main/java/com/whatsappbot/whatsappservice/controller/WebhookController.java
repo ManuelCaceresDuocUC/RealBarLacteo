@@ -1,6 +1,6 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -46,31 +46,28 @@ public class WebhookController {
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
 
-            // 🛒 Pedido desde el catálogo
+            // 🛒 Pedido confirmado desde carrito
             if ("order".equalsIgnoreCase(tipo)) {
-                JsonNode productsNode = payload.path("order").path("products");
+                JsonNode atributos = watiService.obtenerAtributosContacto(telefono);
+                JsonNode itemsNode = atributos.path("contact").path("customParams").path("last_cart_items");
+                double total = atributos.path("contact").path("customParams").path("last_cart_total_value").asDouble(0.0);
 
-                if (!productsNode.isArray() || productsNode.size() == 0) {
+                if (!itemsNode.isArray() || itemsNode.size() == 0) {
                     log.warn("⚠️ Pedido recibido sin productos");
                     return ResponseEntity.ok().build();
                 }
 
-                List<ProductoCarritoDTO> productos = new ArrayList<>();
-                double total = 0;
+                List<ProductoCarritoDTO> productos = Arrays.asList(
+                    objectMapper.treeToValue(itemsNode, ProductoCarritoDTO[].class)
+                );
+
                 StringBuilder detalle = new StringBuilder();
-
-                for (JsonNode productoNode : productsNode) {
-                    ProductoCarritoDTO producto = objectMapper.treeToValue(productoNode, ProductoCarritoDTO.class);
-                    productos.add(producto);
-
-                    double subtotal = producto.getPrice() * producto.getQuantity();
-                    total += subtotal;
-                    detalle.append(String.format("- %dx %s\n", producto.getQuantity(), producto.getName()));
+                for (ProductoCarritoDTO p : productos) {
+                    detalle.append(String.format("- %dx %s\n", p.getQuantity(), p.getName()));
                 }
 
                 String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
 
-                // Guardar pedido en base de datos
                 PedidoEntity pedido = new PedidoEntity();
                 pedido.setPedidoId(pedidoId);
                 pedido.setTelefono(telefono);
@@ -80,16 +77,16 @@ public class WebhookController {
 
                 log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
 
-                // Generar link de pago
+                // Link de pago
                 int monto = (int) Math.round(total);
                 PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                 String linkPago = pago.getUrl();
 
-                // Generar PDF
+                // Comanda
                 byte[] pdf = pdfService.generarComandaPDF(pedidoId, productos, total);
                 String urlComanda = s3Service.subirComanda(pedidoId, pdf);
 
-                // Enviar comanda y link de pago
+                // Enviar mensajes
                 watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
                 watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
             }
