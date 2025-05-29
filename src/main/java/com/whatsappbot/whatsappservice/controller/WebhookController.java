@@ -85,7 +85,12 @@ public ResponseEntity<?> recibirWebhook(@RequestBody JsonNode payload) {
 
         JsonNode productosJson = detalle.path("orderDetails");
         double total = detalle.path("total").asDouble();
+System.out.println("💰 Total del pedido extraído: " + total);
 
+if (total <= 0) {
+    throw new RuntimeException("El monto total es inválido: " + total);
+}
+int monto = (int) Math.round(total);
         List<ProductoCarritoDTO> productos = new ArrayList<>();
         for (JsonNode productoJson : productosJson) {
             ProductoCarritoDTO producto = new ProductoCarritoDTO();
@@ -101,10 +106,9 @@ public ResponseEntity<?> recibirWebhook(@RequestBody JsonNode payload) {
         String urlComanda = s3Service.subirComanda(pedidoId, pdf);
 
         // Enviar confirmación + link de pago
-        watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
-        int monto = (int) Math.round(total);
-        PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
-        watiService.enviarMensajePagoEstatico(telefono, total, pago.getUrl());
+       watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
+PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
+watiService.enviarMensajePagoEstatico(telefono, total, pago.getUrl());
 
         return ResponseEntity.ok().build();
 
