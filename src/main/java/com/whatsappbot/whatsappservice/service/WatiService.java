@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import okhttp3.MediaType;
@@ -166,6 +167,27 @@ public class WatiService {
     data.put("parameters", parametros);
 
     enviarPostWati(url, data, "confirmación simple");
+}
+public JsonNode obtenerAtributosContacto(String telefono) throws IOException {
+    telefono = telefono.replace("+", "");
+    String url = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
+
+    Request request = new Request.Builder()
+        .url(url)
+        .addHeader("Authorization", "Bearer " + apiKey)
+        .get()
+        .build();
+
+    try (Response response = client.newCall(request).execute()) {
+        if (!response.isSuccessful()) {
+            throw new IOException("❌ Error al consultar atributos WATI: " + response.code());
+        }
+
+        String body = response.body().string();
+        JsonNode root = mapper.readTree(body);
+        System.out.println("🔍 Respuesta atributos contacto: " + root.toPrettyString());
+        return root;
+    }
 }
 
     

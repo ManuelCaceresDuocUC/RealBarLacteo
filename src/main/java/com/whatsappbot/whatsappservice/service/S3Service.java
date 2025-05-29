@@ -35,34 +35,41 @@ public class S3Service {
             .build();
     }
 
-    public String subirComanda(String nombreArchivo, InputStream contenido) {
-    try {
-        System.out.println("📤 Subiendo a S3: bucket=" + bucketName + ", archivo=" + nombreArchivo);
+    // ✅ Método principal: subir comanda desde byte[]
+    public String subirComanda(String nombreArchivo, byte[] contenido) {
+        try {
+            System.out.println("📤 Subiendo a S3: bucket=" + bucketName + ", archivo=" + nombreArchivo);
 
-        byte[] bytes = contenido.readAllBytes();
+            PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(nombreArchivo + ".pdf")
+                .contentType("application/pdf")
+                .acl("public-read") // 🔓 Hace público el archivo
+                .build();
 
-        PutObjectRequest request = PutObjectRequest.builder()
-    .bucket(bucketName)
-    .key(nombreArchivo)
-    .contentType("application/pdf")
-    .build(); // ❌ sin .acl()
+            s3.putObject(request, RequestBody.fromBytes(contenido));
 
-        s3.putObject(request, RequestBody.fromBytes(bytes));
+            String url = "https://" + bucketName + ".s3.amazonaws.com/" +
+                URLEncoder.encode(nombreArchivo + ".pdf", StandardCharsets.UTF_8);
 
-        String url = "https://" + bucketName + ".s3.amazonaws.com/" +
-            URLEncoder.encode(nombreArchivo, StandardCharsets.UTF_8);
-        System.out.println("✅ Archivo subido a S3 correctamente: " + url);
-        return url;
-    } catch (IOException e) {
-        System.err.println("❌ Error al leer el InputStream del PDF:");
-        e.printStackTrace();
-        return null;
-    } catch (Exception e) {
-        System.err.println("❌ Error general al subir a S3:");
-        e.printStackTrace();
-        return null;
+            System.out.println("✅ Archivo subido a S3 correctamente: " + url);
+            return url;
+        } catch (Exception e) {
+            System.err.println("❌ Error al subir a S3:");
+            e.printStackTrace();
+            return null;
+        }
     }
-}
 
-
+    // ✅ Método sobrecargado: subir comanda desde InputStream
+    public String subirComanda(String nombreArchivo, InputStream contenido) {
+        try {
+            byte[] bytes = contenido.readAllBytes();
+            return subirComanda(nombreArchivo, bytes);
+        } catch (IOException e) {
+            System.err.println("❌ Error al leer InputStream para subir a S3:");
+            e.printStackTrace();
+            return null;
+        }
+    }
 }

@@ -1,8 +1,7 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.Arrays;
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,8 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
-import com.whatsappbot.whatsappservice.model.PedidoEntity;
-import com.whatsappbot.whatsappservice.repository.PedidoRepository;
+import com.whatsappbot.whatsappservice.dto.ProductoCarritoDTO;
+import com.whatsappbot.whatsappservice.service.PdfService;
+import com.whatsappbot.whatsappservice.service.PedidoService;
+import com.whatsappbot.whatsappservice.service.S3Service;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
@@ -28,8 +29,10 @@ import lombok.extern.slf4j.Slf4j;
 public class WebhookController {
 
     private final WatiService watiService;
-    private final PedidoRepository pedidoRepository;
+    private final PedidoService pedidoService;
     private final TransbankService transbankService;
+    private final PdfService pdfService;
+    private final S3Service s3Service;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostMapping("/wati")
@@ -41,47 +44,36 @@ public class WebhookController {
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
 
-            // 🛒 Pedido desde el catálogo
             if ("order".equalsIgnoreCase(tipo)) {
-                        JsonNode orderNode = payload.path("order");
-                        log.info("📦 Nodo order: {}", orderNode);
-                // Validar si hay productos
-                if (orderNode == null || !orderNode.has("products") || !orderNode.get("products").isArray() || orderNode.get("products").isEmpty()) {
-                    log.warn("⚠️ Pedido sin productos, no se procesa.");
+                // 🔄 Obtener carrito real desde WATI
+                JsonNode atributos = watiService.obtenerAtributosContacto(telefono);
+                JsonNode lastCartItems = atributos.path("contact").path("customParams").path("last_cart_items");
+                double total = atributos.path("contact").path("customParams").path("last_cart_total_value").asDouble(0.0);
+
+                if (!lastCartItems.isArray() || lastCartItems.size() == 0) {
+                    log.warn("⚠️ Carrito vacío para el número {}", telefono);
                     return ResponseEntity.ok().build();
                 }
 
-                Map<String, Object> resultado = construirDetalleYTotalDesdeCatalogo(orderNode);
-                String detalle = (String) resultado.get("detalle");
-                double total = (double) resultado.get("total");
+                List<ProductoCarritoDTO> productos = Arrays.asList(
+                    objectMapper.treeToValue(lastCartItems, ProductoCarritoDTO[].class)
+                );
 
-                if (total <= 0) {
-                    log.warn("❌ Monto inválido para generar transacción: {}", total);
-                    return ResponseEntity.ok().build();
-                }
+                // 🛒 Crear pedido y comanda
+                String pedidoId = pedidoService.crearPedidoConDetalle(telefono, productos, total);
+                byte[] pdf = pdfService.generarComandaPDF(pedidoId, productos, total);
+                String urlComanda = s3Service.subirComanda(pedidoId, pdf);
 
-                String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
-
-                // Guardar pedido en la base de datos
-                PedidoEntity pedido = new PedidoEntity();
-                pedido.setPedidoId(pedidoId);
-                pedido.setTelefono(telefono);
-                pedido.setDetalle(detalle);
-                pedido.setEstado("pendiente");
-                pedidoRepository.save(pedido);
-
-                log.info("🛒 Pedido guardado como pendiente: {}", pedidoId);
-
-                // Generar link de pago
+                // 💳 Generar link de pago
                 int monto = (int) Math.round(total);
                 PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                 String linkPago = pago.getUrl();
 
-                // Enviar mensaje de pago
+                // 📤 Enviar mensajes
+                watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
                 watiService.enviarMensajePagoEstatico(telefono, total, linkPago);
             }
 
-            // 💬 Mensaje de texto tipo "ayuda"
             else if ("text".equalsIgnoreCase(tipo)) {
                 String texto = payload.path("text").asText("").toLowerCase();
                 log.info("📥 Mensaje de texto: {} desde {}", texto, telefono);
@@ -96,29 +88,5 @@ public class WebhookController {
         }
 
         return ResponseEntity.ok().build();
-    }
-
-    // Método para construir detalle y total del carrito
-    private Map<String, Object> construirDetalleYTotalDesdeCatalogo(JsonNode orderNode) {
-        StringBuilder detalle = new StringBuilder();
-        double total = 0.0;
-
-        if (orderNode != null && orderNode.has("products")) {
-            for (JsonNode producto : orderNode.get("products")) {
-                String nombre = producto.path("name").asText("Producto desconocido");
-                int cantidad = producto.path("quantity").asInt(1);
-                double precio = producto.path("price").asDouble(1000); // fallback
-
-                total += cantidad * precio;
-                detalle.append("- ").append(cantidad).append(" x ").append(nombre).append("\n");
-            }
-        } else {
-            detalle.append("Sin productos listados.");
-        }
-
-        Map<String, Object> resultado = new HashMap<>();
-        resultado.put("detalle", detalle.toString().trim());
-        resultado.put("total", total);
-        return resultado;
     }
 }
