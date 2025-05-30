@@ -12,10 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
+import com.whatsappbot.whatsappservice.service.ComandaService;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
@@ -31,7 +31,7 @@ public class WebhookController {
     private final WatiService watiService;
     private final PedidoRepository pedidoRepository;
     private final TransbankService transbankService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ComandaService comandaService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @PostMapping("/wati")
@@ -42,82 +42,57 @@ public class WebhookController {
             String tipo = payload.path("type").asText("");
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
+            String texto = payload.path("text").asText("").toLowerCase();
 
-            if ("text".equalsIgnoreCase(tipo)) {
-                String texto = payload.path("text").asText("").toLowerCase();
-                log.info("📥 Mensaje de texto: {} desde {}", texto, telefono);
+            // ✅ Detecta plantilla que contiene detalle y total del carrito
+            if ("text".equalsIgnoreCase(tipo) && texto.contains("total: $")) {
+                log.info("🧾 Detectado mensaje de plantilla con resumen de pedido");
 
-                if (texto.contains("ayuda")) {
-                    watiService.enviarTemplateAyuda(telefono, nombre);
+                // Revisa si ya hay un pedido pendiente
+                PedidoEntity pedidoExistente = pedidoRepository.findFirstByTelefonoAndEstado(telefono, "pendiente");
+                if (pedidoExistente != null && pedidoExistente.getLinkPago() != null) {
+    log.info("🔁 Ya existe un pedido pendiente con link, reenviando...");
+    watiService.enviarMensajePagoEstatico(telefono, pedidoExistente.getMonto(), pedidoExistente.getLinkPago());
+    return ResponseEntity.ok().build();
+}
+
+                // Extrae monto del texto con expresión regular
+                Matcher matcher = Pattern.compile("total: \\$(\\d+)", Pattern.CASE_INSENSITIVE).matcher(texto);
+                if (!matcher.find()) {
+                    log.warn("❌ No se pudo extraer el total del mensaje");
+                    return ResponseEntity.ok().build();
                 }
 
-                if (texto.contains("confirmar pedido")) {
-                    String url = "https://live-server.wati.io/api/v1/getMessages?waId=" + telefono;
-                    var headers = new org.springframework.http.HttpHeaders();
-                    String apiKey = System.getenv("WATI_API_KEY");
-                    headers.set("Authorization", "Bearer " + apiKey);
-                    var entity = new org.springframework.http.HttpEntity<>(headers);
-                    var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
+                int monto = Integer.parseInt(matcher.group(1));
+                String pedidoId = "PED-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-                    JsonNode mensajes = response.getBody();
-                    String detalle = "Pedido desde carrito";
-                    int monto = 1000;
-                    boolean encontrado = false;
+                // Guarda el pedido
+                PedidoEntity pedido = new PedidoEntity();
+                pedido.setPedidoId(pedidoId);
+                pedido.setTelefono(telefono);
+                pedido.setDetalle(payload.path("text").asText());
+                pedido.setEstado("pendiente");
+                pedido.setMonto((double) monto);
+                pedidoRepository.save(pedido);
 
-                    for (int i = mensajes.size() - 1; i >= 0; i--) {
-                        JsonNode mensaje = mensajes.get(i);
-                        if (mensaje.has("direction") && mensaje.get("direction").asText().equals("in") && mensaje.has("text")) {
-                            String contenido = mensaje.get("text").asText();
-                            boolean tieneProductos = contenido.contains("×");
-                            
-                            Pattern patternTotal = Pattern.compile("Total: \\$(\\d+)");
-                            Matcher mTotal = patternTotal.matcher(contenido);
-                            if (tieneProductos && mTotal.find()) {
-                                monto = Integer.parseInt(mTotal.group(1));
-                                detalle = contenido;
-                                encontrado = true;
+                // Genera link de pago
+                PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
+                pedido.setLinkPago(pago.getUrl());
+                pedidoRepository.save(pedido);
 
-                                String respuestaResumen = "✅ Recibimos tu pedido.\n\n" + detalle + "\n\n💳 Estamos generando tu link de pago. En breve lo recibirás por este mismo chat.";
-                                watiService.enviarMensajeTexto(telefono, respuestaResumen);
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!encontrado) {
-                        log.warn("⚠️ No se pudo encontrar un mensaje con detalle y total válido para {}", telefono);
-                        watiService.enviarMensajeTexto(telefono, "❌ No pudimos procesar tu pedido. Por favor revisa tu carrito y vuelve a intentarlo.");
-                        return ResponseEntity.ok().build();
-                    }
-
-                    PedidoEntity pedidoExistente = pedidoRepository.findFirstByTelefonoAndEstado(telefono, "pendiente");
-                    if (pedidoExistente != null) {
-                        log.warn("⚠️ Ya existe un pedido pendiente para el número {}", telefono);
-                        String linkPagoExistente = pedidoExistente.getLinkPago();
-                        if (linkPagoExistente != null && !linkPagoExistente.isBlank()) {
-                            log.info("🔁 Reenviando link de pago existente: {}", linkPagoExistente);
-                            watiService.enviarMensajePagoEstatico(telefono, (double) monto, linkPagoExistente);
-                        } else {
-                            log.warn("⚠️ Pedido pendiente sin link de pago registrado.");
-                        }
-                        return ResponseEntity.ok().build();
-                    }
-
-                    String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
-                    PedidoEntity pedido = new PedidoEntity();
-                    pedido.setPedidoId(pedidoId);
-                    pedido.setTelefono(telefono);
-                    pedido.setDetalle(detalle);
-                    pedido.setEstado("pendiente");
-                    pedidoRepository.save(pedido);
-
-                    PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
-                    String linkPago = pago.getUrl();
-                    pedido.setLinkPago(linkPago);
-                    pedidoRepository.save(pedido);
-
-                    watiService.enviarMensajePagoEstatico(telefono, (double) monto, linkPago);
+                // Genera PDF y lo sube
+                String urlComanda = comandaService.generarPDF(pedido);
+                if (urlComanda != null) {
+                    log.info("📤 Comanda generada y subida correctamente: {}", urlComanda);
                 }
+
+                // Envía el link de pago por WhatsApp
+                watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
+            }
+
+            // Mensaje de texto "ayuda"
+            else if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
+                watiService.enviarTemplateAyuda(telefono, nombre);
             }
 
         } catch (Exception e) {

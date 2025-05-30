@@ -9,6 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+
 @Entity
 @Table(name = "pedidos")
 public class PedidoEntity {
@@ -18,31 +19,39 @@ public class PedidoEntity {
     private Long id;
 
     private String pedidoId;
+
     private String telefono;
-    
+
     @Column(columnDefinition = "TEXT")
     private String detalle;
+
     @Column(length = 20)
     private String estado;
 
+    @Column(name = "monto")
+    private Double monto;
+
+    @Column(name = "link_pago", columnDefinition = "TEXT")
+    private String linkPago;
+
+    @Column(name = "fecha_creacion", updatable = false)
+    private LocalDateTime fechaCreacion;
+
     public PedidoEntity() {}
 
-public PedidoEntity(String pedidoId, String telefono, String detalle) {
-    this.pedidoId = pedidoId;
-    this.telefono = telefono;
-    this.detalle = detalle;
-    this.estado = "pendiente"; // Valor por defecto al crear
-}
-
-    public String getEstado() {
-        return estado;
+    public PedidoEntity(String pedidoId, String telefono, String detalle) {
+        this.pedidoId = pedidoId;
+        this.telefono = telefono;
+        this.detalle = detalle;
+        this.estado = "pendiente";
     }
 
-    public void setEstado(String estado) {
-        this.estado = estado;
+    @PrePersist
+    protected void onCreate() {
+        this.fechaCreacion = LocalDateTime.now();
     }
 
-    // Getters y Setters
+    // === Getters y Setters ===
 
     public Long getId() {
         return id;
@@ -71,31 +80,36 @@ public PedidoEntity(String pedidoId, String telefono, String detalle) {
     public void setDetalle(String detalle) {
         this.detalle = detalle;
     }
-@Column(name = "link_pago", columnDefinition = "TEXT")
-private String linkPago;
 
-public String getLinkPago() {
-    return linkPago;
+    public String getEstado() {
+        return estado;
+    }
+
+    public void setEstado(String estado) {
+        this.estado = estado;
+    }
+
+    public Double getMonto() {
+        return monto;
+    }
+
+    public void setMonto(Double monto) {
+        this.monto = monto;
+    }
+
+    public String getLinkPago() {
+        return linkPago;
+    }
+
+    public void setLinkPago(String linkPago) {
+        this.linkPago = linkPago;
+    }
+
+    public LocalDateTime getFechaCreacion() {
+        return fechaCreacion;
+    }
+
+    public void setFechaCreacion(LocalDateTime fechaCreacion) {
+        this.fechaCreacion = fechaCreacion;
+    }
 }
-
-public void setLinkPago(String linkPago) {
-    this.linkPago = linkPago;
-}
-@Column(name = "fecha_creacion", updatable = false)
-private LocalDateTime fechaCreacion;
-
-public LocalDateTime getFechaCreacion() {
-    return fechaCreacion;
-}
-
-public void setFechaCreacion(LocalDateTime fechaCreacion) {
-    this.fechaCreacion = fechaCreacion;
-}
-
-@PrePersist
-protected void onCreate() {
-    this.fechaCreacion = LocalDateTime.now();
-}
-
-}
-
