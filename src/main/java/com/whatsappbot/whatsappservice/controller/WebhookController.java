@@ -58,7 +58,8 @@ public class WebhookController {
                 log.info("\uD83D\uDD0D Trigger de carrito detectado para {}", telefono);
 
                 // Consultar mensajes del historial
-                String url = "https://live-mt-server.wati.io/api/v1/getMessages/" + telefono;
+                String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
+
 
                 var headers = new org.springframework.http.HttpHeaders();
                 headers.set("Authorization", "Bearer " + System.getenv("WATI_API_KEY"));
