@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -86,7 +87,8 @@ public class WebhookController {
                             break;
                         } else {
                             log.info("⏳ Intento {}: mensaje de resumen no encontrado, esperando 2 segundos...", intento);
-                            Thread.sleep(2000);
+                            TimeUnit.SECONDS.sleep(2);
+
                         }
 
                     } catch (Exception e) {
