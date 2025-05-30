@@ -74,15 +74,13 @@ if (mensajes == null || !mensajes.isArray()) {
 
                 String mensajeResumen = null;
                 for (int i = mensajes.size() - 1; i >= 0; i--) {
-                    JsonNode msg = mensajes.get(i);
-                    if (msg.has("text")) {
-                        String contenido = msg.get("text").asText();
-                        if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
-                            mensajeResumen = contenido;
-                            break;
-                        }
-                    }
-                }
+    JsonNode msg = mensajes.get(i);
+    String contenido = msg.path("finalText").asText("");
+    if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+        mensajeResumen = contenido;
+        break;
+    }
+}
 
                 if (mensajeResumen == null) {
                     log.warn("⚠️ No se encontró mensaje de resumen posterior al trigger");
