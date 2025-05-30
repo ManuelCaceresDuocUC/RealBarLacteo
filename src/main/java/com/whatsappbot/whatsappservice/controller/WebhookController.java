@@ -66,11 +66,11 @@ public class WebhookController {
                 var entity = new org.springframework.http.HttpEntity<>(headers);
                 var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
 
-                JsonNode mensajes = response.getBody();
-                if (mensajes == null || !mensajes.isArray()) {
-                    log.warn("❌ No se pudo obtener historial de mensajes");
-                    return ResponseEntity.ok().build();
-                }
+                JsonNode mensajes = response.getBody().path("messages").path("items");
+if (mensajes == null || !mensajes.isArray()) {
+    log.warn("❌ No se pudo obtener historial de mensajes o no hay mensajes");
+    return ResponseEntity.ok().build();
+}
 
                 String mensajeResumen = null;
                 for (int i = mensajes.size() - 1; i >= 0; i--) {
