@@ -39,39 +39,71 @@ public class WebhookController {
 
     @PostMapping("/wati")
     public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
-        log.info("📥 Payload recibido: {}", payload.toPrettyString());
+        log.info("\uD83D\uDCE5 Payload recibido: {}", payload.toPrettyString());
 
         try {
             String tipo = payload.path("type").asText("");
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
-            String texto = payload.path("text").asText("").toLowerCase();
+            String texto = payload.path("text").asText().toLowerCase();
 
-            // ✅ Detectar mensaje de plantilla con resumen del carrito
-            if ("text".equalsIgnoreCase(tipo) && texto.contains("total estimado:")) {
-                log.info("🧾 Detectado mensaje de resumen del carrito");
+            // 💬 Mensaje de texto: ayuda
+            if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
+                watiService.enviarTemplateAyuda(telefono, nombre);
+                return ResponseEntity.ok().build();
+            }
 
-                // 🕒 Verifica si ya hay pedido pendiente en los últimos 5 minutos
-                LocalDateTime haceCincoMin = LocalDateTime.now().minusMinutes(5);
-                List<PedidoEntity> pedidos = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
-                    telefono, "pendiente", haceCincoMin
-                );
+            // 📦 Detectar trigger de carrito
+            if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
+                log.info("\uD83D\uDD0D Trigger de carrito detectado para {}", telefono);
 
-                if (!pedidos.isEmpty()) {
-                    log.warn("⚠️ Ya existe un pedido reciente y pendiente para este número: {}", telefono);
+                // Consultar mensajes del historial
+                String url = "https://live-server.wati.io/api/v1/getMessages?waId=" + telefono;
+                var headers = new org.springframework.http.HttpHeaders();
+                headers.set("Authorization", "Bearer " + System.getenv("WATI_API_KEY"));
+                var entity = new org.springframework.http.HttpEntity<>(headers);
+                var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
+
+                JsonNode mensajes = response.getBody();
+                if (mensajes == null || !mensajes.isArray()) {
+                    log.warn("❌ No se pudo obtener historial de mensajes");
                     return ResponseEntity.ok().build();
                 }
 
-                // 🧾 Extrae detalle del texto
-                String detalle = extraerDetalle(texto);
-                int monto = extraerMonto(texto);
+                String mensajeResumen = null;
+                for (int i = mensajes.size() - 1; i >= 0; i--) {
+                    JsonNode msg = mensajes.get(i);
+                    if (msg.has("text")) {
+                        String contenido = msg.get("text").asText();
+                        if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+                            mensajeResumen = contenido;
+                            break;
+                        }
+                    }
+                }
+
+                if (mensajeResumen == null) {
+                    log.warn("⚠️ No se encontró mensaje de resumen posterior al trigger");
+                    return ResponseEntity.ok().build();
+                }
+
+                // Validación: si ya hay un pedido reciente y pendiente, no duplicar
+                List<PedidoEntity> recientes = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
+                    telefono, "pendiente", LocalDateTime.now().minusMinutes(5)
+                );
+                if (!recientes.isEmpty()) {
+                    log.warn("⏳ Ya existe un pedido reciente para {}", telefono);
+                    return ResponseEntity.ok().build();
+                }
+
+                String detalle = extraerDetalle(mensajeResumen);
+                int monto = extraerMonto(mensajeResumen);
 
                 if (detalle == null || monto == -1) {
-                    log.warn("❌ No se pudo extraer el detalle o monto desde el mensaje");
+                    log.warn("❌ No se pudo extraer el detalle o monto del mensaje");
                     return ResponseEntity.ok().build();
                 }
 
-                // 📦 Crear nuevo pedido
                 String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                 PedidoEntity pedido = new PedidoEntity();
                 pedido.setPedidoId(pedidoId);
@@ -84,22 +116,14 @@ public class WebhookController {
                 pedidoRepository.save(pedido);
                 log.info("📝 Pedido guardado: {}", pedidoId);
 
-                // 💳 Generar link de pago
                 PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                 pedido.setLinkPago(pago.getUrl());
                 pedidoRepository.save(pedido);
 
-                // 🧾 Generar PDF comanda (guardado en S3)
                 String urlComanda = comandaService.generarPDF(pedido);
                 log.info("📄 Comanda PDF generada: {}", urlComanda);
 
-                // 🚀 Enviar mensaje con link de pago
                 watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
-            }
-
-            // Mensaje de texto "ayuda"
-            else if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
-                watiService.enviarTemplateAyuda(telefono, nombre);
             }
 
         } catch (Exception e) {
@@ -109,23 +133,20 @@ public class WebhookController {
         return ResponseEntity.ok().build();
     }
 
-    // 🔍 Extraer el texto entre "desde el carrito:" y el total
     private String extraerDetalle(String texto) {
         try {
             int inicio = texto.indexOf("desde el carrito:") + "desde el carrito:".length();
             int fin = texto.indexOf("💰 total estimado");
             if (inicio == -1 || fin == -1 || fin <= inicio) return null;
-
             return texto.substring(inicio, fin).trim();
         } catch (Exception e) {
             return null;
         }
     }
 
-    // 🔍 Extraer monto desde el JSON dentro del texto
     private int extraerMonto(String texto) {
         try {
-            Matcher matcher = Pattern.compile("\"total\":(\\d+\\.?\\d*)", Pattern.CASE_INSENSITIVE).matcher(texto);
+            Matcher matcher = Pattern.compile("\\\"Total\\\":(\\d+\\.?\\d*)").matcher(texto);
             if (matcher.find()) {
                 return (int) Double.parseDouble(matcher.group(1));
             }
