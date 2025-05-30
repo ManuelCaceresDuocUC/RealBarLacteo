@@ -144,4 +144,48 @@ public class WebhookController {
             return ResponseEntity.ok().build(); // importante para evitar que WATI lo considere como error
         }
     }
+    @PostMapping("/wati")
+public ResponseEntity<?> recibirWebhookEnriquecido(@RequestBody JsonNode payload) {
+    try {
+        System.out.println("📦 Webhook enriquecido recibido: " + payload.toPrettyString());
+
+        String telefono = payload.path("telefono").asText();
+        String nombre = payload.path("nombre").asText();
+        double total = payload.path("total").asDouble();
+
+        if (telefono == null || telefono.isEmpty() || total <= 0) {
+            System.err.println("❌ Datos incompletos: teléfono o total inválido");
+            return ResponseEntity.badRequest().body("Datos inválidos");
+        }
+
+        // Leer productos
+        List<ProductoCarritoDTO> productos = new ArrayList<>();
+        for (JsonNode productoJson : payload.path("productos")) {
+            ProductoCarritoDTO producto = new ProductoCarritoDTO();
+            producto.setName(productoJson.path("name").asText());
+            producto.setPrice(productoJson.path("price").asDouble());
+            producto.setQuantity(productoJson.path("quantity").asInt());
+            productos.add(producto);
+        }
+
+        // Guardar pedido y generar comanda
+        String pedidoId = pedidoService.crearPedidoConDetalle(telefono, productos, total);
+        byte[] pdf = pdfService.generarComandaPDF(pedidoId, productos, total);
+        String urlComanda = s3Service.subirComanda(pedidoId, pdf);
+
+        // Enviar mensajes por WhatsApp
+        watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
+        int monto = (int) Math.round(total);
+        PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
+        watiService.enviarMensajePagoEstatico(telefono, total, pago.getUrl());
+
+        return ResponseEntity.ok().build();
+
+    } catch (Exception e) {
+        System.err.println("❌ Error procesando webhook enriquecido: " + e.getMessage());
+        e.printStackTrace();
+        return ResponseEntity.status(500).body("Error procesando webhook enriquecido");
+    }
+}
+
 } 
