@@ -47,48 +47,58 @@ public class WebhookController {
             String nombre = payload.path("senderName").asText("Cliente");
             String texto = payload.path("text").asText().toLowerCase();
 
-            // 💬 Mensaje de texto: ayuda
             if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
                 watiService.enviarTemplateAyuda(telefono, nombre);
                 return ResponseEntity.ok().build();
             }
 
-            // 📦 Detectar trigger de carrito
             if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
                 log.info("\uD83D\uDD0D Trigger de carrito detectado para {}", telefono);
 
-                // Consultar mensajes del historial
                 String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
-
-
                 var headers = new org.springframework.http.HttpHeaders();
                 headers.set("Authorization", "Bearer " + System.getenv("WATI_API_KEY"));
                 var entity = new org.springframework.http.HttpEntity<>(headers);
-                var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
-
-                JsonNode mensajes = response.getBody().path("messages").path("items");
-if (mensajes == null || !mensajes.isArray()) {
-    log.warn("❌ No se pudo obtener historial de mensajes o no hay mensajes");
-    return ResponseEntity.ok().build();
-}
 
                 String mensajeResumen = null;
-                for (int i = mensajes.size() - 1; i >= 0; i--) {
-    JsonNode msg = mensajes.get(i);
-    String contenido = msg.path("finalText").asText("");
-    if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
-        
-        mensajeResumen = contenido;
-        break;
-    }
-}
+                int intentos = 3;
+
+                for (int intento = 1; intento <= intentos; intento++) {
+                    try {
+                        var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
+                        JsonNode mensajes = response.getBody().path("messages").path("items");
+
+                        if (mensajes == null || !mensajes.isArray()) {
+                            log.warn("❌ No se pudo obtener historial de mensajes o no hay mensajes");
+                            return ResponseEntity.ok().build();
+                        }
+
+                        for (int i = mensajes.size() - 1; i >= 0; i--) {
+                            JsonNode msg = mensajes.get(i);
+                            String contenido = msg.path("finalText").asText("");
+                            if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+                                mensajeResumen = contenido;
+                                break;
+                            }
+                        }
+
+                        if (mensajeResumen != null) {
+                            break;
+                        } else {
+                            log.info("⏳ Intento {}: mensaje de resumen no encontrado, esperando 2 segundos...", intento);
+                            Thread.sleep(2000);
+                        }
+
+                    } catch (Exception e) {
+                        log.error("❌ Error durante intento {} al obtener mensajes", intento, e);
+                    }
+                }
 
                 if (mensajeResumen == null) {
-                    log.warn("⚠️ No se encontró mensaje de resumen posterior al trigger");
+                    log.warn("⚠️ No se encontró mensaje de resumen posterior al trigger después de varios intentos");
                     return ResponseEntity.ok().build();
                 }
 
-                // Validación: si ya hay un pedido reciente y pendiente, no duplicar
                 List<PedidoEntity> recientes = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
                     telefono, "pendiente", LocalDateTime.now().minusMinutes(5)
                 );
