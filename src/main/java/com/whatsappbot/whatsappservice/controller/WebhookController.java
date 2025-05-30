@@ -23,6 +23,7 @@ import com.whatsappbot.whatsappservice.service.WatiService;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+
 @RestController
 @RequestMapping("/api/webhook")
 public class WebhookController {
@@ -50,104 +51,110 @@ public class WebhookController {
     }
 
     @PostMapping
-public ResponseEntity<?> recibirWebhook(@RequestBody JsonNode payload) {
-    try {
-        System.out.println("📥 Payload recibido: " + payload.toPrettyString());
-
-        String tipo = payload.path("type").asText();
-        if (!"order".equals(tipo)) return ResponseEntity.ok().build();
-
-        String telefono = payload.path("waId").asText();
-        String referenceId = payload.path("order").path("referenceId").asText();
-        if (referenceId == null || referenceId.isEmpty()) {
-            System.err.println("❌ referenceId no presente en el payload");
-            return ResponseEntity.ok().build();
-        }
-
-        // (OPCIONAL) Intentar obtener atributos de contacto (solo si sirve en el futuro)
+    public ResponseEntity<?> recibirWebhook(@RequestBody JsonNode payload) {
         try {
-            watiService.obtenerAtributosContacto(telefono);
-        } catch (Exception ex) {
-            System.err.println("⚠️ No se pudo obtener atributos del contacto WATI, pero se continúa con el flujo.");
-        }
+            System.out.println("📥 Payload recibido: " + payload.toPrettyString());
 
-        // Consultar WATI para obtener detalle del pedido
-        OkHttpClient client = new OkHttpClient();
-        String url = watiApiUrl + "/api/v1/order_details/" + referenceId;
-        Request request = new Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .build();
+            String tipo = payload.path("type").asText();
+            if (!"order".equals(tipo)) return ResponseEntity.ok().build();
 
-        Response response = client.newCall(request).execute();
-        String responseBody = response.body().string();
-        JsonNode detalle = mapper.readTree(responseBody);
-        System.out.println("📦 Detalle del pedido: " + detalle.toPrettyString());
+            String telefono = payload.path("waId").asText();
 
-        JsonNode productosJson = detalle.path("orderDetails");
-        double total = detalle.path("total").asDouble();
-System.out.println("💰 Total del pedido extraído: " + total);
-
-// Si el total es 0, intentar obtenerlo desde el contacto WATI
-if (total <= 0) {
-    try {
-        OkHttpClient clientInfo = new OkHttpClient();
-        String urlInfo = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
-        Request requestInfo = new Request.Builder()
-            .url(urlInfo)
-            .addHeader("Authorization", "Bearer " + apiKey)
-            .build();
-
-        Response responseInfo = clientInfo.newCall(requestInfo).execute();
-        String responseBodyInfo = responseInfo.body().string();
-        JsonNode contacto = mapper.readTree(responseBodyInfo);
-        
-        JsonNode atributos = contacto.path("contact").path("customParams");
-        for (JsonNode atributo : atributos) {
-            if ("last_cart_total_value".equals(atributo.path("name").asText())) {
-                String valorJson = atributo.path("value").asText(); // ejemplo: {"Total":1500.0,"Currency":"CLP"}
-                JsonNode valorNode = mapper.readTree(valorJson);
-                total = valorNode.path("Total").asDouble();
-                System.out.println("💰 Total obtenido desde atributo: " + total);
-                break;
+            // Verificar si viene el nodo "order"
+            if (!payload.has("order") || payload.path("order").isMissingNode()) {
+                System.err.println("🚫 El payload no contiene el nodo 'order'");
+                return ResponseEntity.ok("Sin nodo 'order', se ignora.");
             }
+
+            String referenceId = payload.path("order").path("referenceId").asText();
+            if (referenceId == null || referenceId.isEmpty()) {
+                System.err.println("❌ referenceId no presente en el payload");
+                return ResponseEntity.ok("Sin referencia, se ignora.");
+            }
+
+            // Consultar atributos de contacto (opcional)
+            try {
+                watiService.obtenerAtributosContacto(telefono);
+            } catch (Exception ex) {
+                System.err.println("⚠️ No se pudo obtener atributos del contacto WATI, pero se continúa con el flujo.");
+            }
+
+            // Consultar WATI para obtener detalle del pedido
+            OkHttpClient client = new OkHttpClient();
+            String url = watiApiUrl + "/api/v1/order_details/" + referenceId;
+            Request request = new Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer " + apiKey)
+                    .build();
+
+            Response response = client.newCall(request).execute();
+            String responseBody = response.body().string();
+            JsonNode detalle = mapper.readTree(responseBody);
+
+            System.out.println("📦 Detalle del pedido: " + detalle.toPrettyString());
+
+            JsonNode productosJson = detalle.path("orderDetails");
+            double total = detalle.path("total").asDouble();
+            System.out.println("💰 Total del pedido extraído: " + total);
+
+            // Intentar recuperar total desde atributos del contacto si total es 0
+            if (total <= 0) {
+                try {
+                    String urlInfo = watiApiUrl + "/api/v1/getContactByWhatsappNumber?whatsappNumber=" + telefono;
+                    Request requestInfo = new Request.Builder()
+                            .url(urlInfo)
+                            .addHeader("Authorization", "Bearer " + apiKey)
+                            .build();
+
+                    Response responseInfo = client.newCall(requestInfo).execute();
+                    String responseBodyInfo = responseInfo.body().string();
+                    JsonNode contacto = mapper.readTree(responseBodyInfo);
+
+                    JsonNode atributos = contacto.path("contact").path("customParams");
+                    for (JsonNode atributo : atributos) {
+                        if ("last_cart_total_value".equals(atributo.path("name").asText())) {
+                            String valorJson = atributo.path("value").asText();
+                            JsonNode valorNode = mapper.readTree(valorJson);
+                            total = valorNode.path("Total").asDouble();
+                            System.out.println("💰 Total obtenido desde atributo: " + total);
+                            break;
+                        }
+                    }
+                } catch (Exception ex) {
+                    System.err.println("⚠️ No se pudo obtener el total desde atributos del contacto: " + ex.getMessage());
+                }
+            }
+
+            if (total <= 0) {
+                throw new RuntimeException("El monto total es inválido incluso después de intentar desde el contacto: " + total);
+            }
+
+            int monto = (int) Math.round(total);
+            List<ProductoCarritoDTO> productos = new ArrayList<>();
+            for (JsonNode productoJson : productosJson) {
+                ProductoCarritoDTO producto = new ProductoCarritoDTO();
+                producto.setName(productoJson.path("name").asText());
+                producto.setPrice(productoJson.path("price").asDouble());
+                producto.setQuantity(productoJson.path("quantity").asInt());
+                productos.add(producto);
+            }
+
+            // Guardar pedido y generar comanda
+            String pedidoId = pedidoService.crearPedidoConDetalle(telefono, productos, total);
+            byte[] pdf = pdfService.generarComandaPDF(pedidoId, productos, total);
+            String urlComanda = s3Service.subirComanda(pedidoId, pdf);
+
+            // Enviar confirmación + link de pago
+            watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
+            PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
+            watiService.enviarMensajePagoEstatico(telefono, total, pago.getUrl());
+
+            return ResponseEntity.ok().build();
+
+        } catch (Exception e) {
+            System.err.println("❌ Error procesando webhook: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Error procesando webhook");
         }
-    } catch (Exception ex) {
-        System.err.println("⚠️ No se pudo obtener el total desde atributos del contacto: " + ex.getMessage());
     }
-}
-
-if (total <= 0) {
-    throw new RuntimeException("El monto total es inválido incluso después de intentar desde el contacto: " + total);
-}
-
-int monto = (int) Math.round(total);
-        List<ProductoCarritoDTO> productos = new ArrayList<>();
-        for (JsonNode productoJson : productosJson) {
-            ProductoCarritoDTO producto = new ProductoCarritoDTO();
-            producto.setName(productoJson.path("name").asText());
-            producto.setPrice(productoJson.path("price").asDouble());
-            producto.setQuantity(productoJson.path("quantity").asInt());
-            productos.add(producto);
-        }
-
-        // Guardar pedido y generar comanda
-        String pedidoId = pedidoService.crearPedidoConDetalle(telefono, productos, total);
-        byte[] pdf = pdfService.generarComandaPDF(pedidoId, productos, total);
-        String urlComanda = s3Service.subirComanda(pedidoId, pdf);
-
-        // Enviar confirmación + link de pago
-       watiService.enviarMensajeConTemplate(telefono, pedidoId, urlComanda);
-PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
-watiService.enviarMensajePagoEstatico(telefono, total, pago.getUrl());
-
-        return ResponseEntity.ok().build();
-
-    } catch (Exception e) {
-        System.err.println("❌ Error procesando webhook: " + e.getMessage());
-        e.printStackTrace();
-        return ResponseEntity.status(500).body("Error procesando webhook");
-    }
-}
-
 }
