@@ -77,6 +77,7 @@ if (mensajes == null || !mensajes.isArray()) {
     JsonNode msg = mensajes.get(i);
     String contenido = msg.path("finalText").asText("");
     if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+        
         mensajeResumen = contenido;
         break;
     }
