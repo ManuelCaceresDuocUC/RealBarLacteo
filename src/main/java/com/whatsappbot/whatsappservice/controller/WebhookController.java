@@ -138,10 +138,10 @@ public class WebhookController {
                     String detalle = extraerDetalleFlexible(mensajeResumen);
                     int monto = extraerMontoFlexible(mensajeResumen);
 
-                    if (detalle == null || monto == -1) {
-                        log.warn("❌ No se pudo extraer el detalle o monto del mensaje");
-                        return ResponseEntity.ok().build();
-                    }
+                    if (detalle == null || monto <= 0) {
+    log.warn("❌ No se pudo extraer el detalle o monto válido del mensaje. Monto: {}", monto);
+    return ResponseEntity.ok().build();
+}
 
                     String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                     PedidoEntity pedido = new PedidoEntity();
@@ -192,20 +192,26 @@ public class WebhookController {
     }
 
     private int extraerMontoFlexible(String texto) {
-        try {
-            int inicio = texto.indexOf("${");
-            int fin = texto.indexOf("}", inicio);
-            if (inicio != -1 && fin != -1) {
-                String jsonStr = texto.substring(inicio + 2, fin + 1);
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode node = mapper.readTree(jsonStr);
-                return (int) node.path("Total").asDouble(0);
-            }
-        } catch (Exception e) {
-            log.error("❌ Error extrayendo el monto", e);
+    try {
+        int inicio = texto.indexOf("${") + 2;
+        int fin = texto.indexOf("}", inicio);
+        if (inicio > 1 && fin > inicio) {
+            String jsonStr = texto.substring(inicio, fin + 1);
+            log.info("🧾 JSON de monto extraído: {}", jsonStr);
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode node = mapper.readTree(jsonStr);
+
+            double montoDecimal = node.path("Total").asDouble();
+            int montoEntero = (int) Math.round(montoDecimal);
+
+            return montoEntero;
         }
-        return -1;
+    } catch (Exception e) {
+        log.error("❌ Error extrayendo el monto", e);
     }
+    return -1;
+}
 
     private long obtenerTimestamp(JsonNode msg) {
         if (msg.has("timestamp")) {
