@@ -98,22 +98,22 @@ public class WebhookController {
                     // Ordenar los mensajes por timestamp ASCENDENTE
                     mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
                     for (JsonNode msg : mensajesOrdenados) {
-                long msgTimestamp = obtenerTimestamp(msg);
+    long msgTimestamp = obtenerTimestamp(msg);
 
-                // Solo considerar mensajes posteriores al trigger
-                if (msgTimestamp <= triggerTimestamp) continue;
+    if (msgTimestamp <= triggerTimestamp) continue;
 
-                // ✅ Revisar tanto finalText como text
-                String contenido = msg.hasNonNull("finalText") && !msg.path("finalText").asText("").isBlank()
-                    ? msg.path("finalText").asText("")
-                    : msg.path("text").asText("");
+    String finalText = msg.path("finalText").asText("");
+    String text = msg.path("text").asText("");
+    String contenido = !finalText.isBlank() ? finalText : text;
 
-                if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
-                    mensajeResumen = contenido;
-                    break;
-                }
-            }
+    log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
 
+    if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+        log.info("✅ Mensaje resumen encontrado: {}", contenido);
+        mensajeResumen = contenido;
+        break;
+    }
+}
 
                             if (mensajeResumen != null) {
                                 break;
