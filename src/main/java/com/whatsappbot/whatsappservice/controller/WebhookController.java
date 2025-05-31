@@ -108,11 +108,12 @@ public class WebhookController {
 
     log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
 
-    if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
-        log.info("✅ Mensaje resumen encontrado: {}", contenido);
-        mensajeResumen = contenido;
-        break;
-    }
+   String contenidoNormalizado = contenido.toLowerCase();
+if (contenidoNormalizado.contains("desde el carrito") && contenidoNormalizado.contains("total estimado")) {
+    log.info("✅ Mensaje resumen encontrado: {}", contenido);
+    mensajeResumen = contenido;
+    break;
+}
 }
 
                             if (mensajeResumen != null) {
