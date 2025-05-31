@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,6 +41,7 @@ public class WebhookController {
     private final RestTemplate restTemplate = new RestTemplate();
 
     private static final ConcurrentHashMap<String, Boolean> procesamientoEnCurso = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, String> ultimoMensajeProcesadoPorNumero = new ConcurrentHashMap<>();
 
     @PostMapping("/wati")
     public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
@@ -52,9 +52,16 @@ public class WebhookController {
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
             String texto = payload.path("text").asText().toLowerCase();
+            String messageId = payload.path("whatsappMessageId").asText("");
 
             if (telefono.isEmpty()) {
                 log.warn("❌ Número de teléfono no encontrado en el payload");
+                return ResponseEntity.ok().build();
+            }
+
+            // Evitar reprocesar el mismo mensaje
+            if (messageId.isEmpty() || messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) {
+                log.warn("⏳ Mensaje duplicado detectado para {}. Ignorando.", telefono);
                 return ResponseEntity.ok().build();
             }
 
@@ -138,7 +145,6 @@ public class WebhookController {
 
                     String detalle = extraerDetalleFlexible(mensajeResumen);
                     int monto = extraerMontoFlexible(mensajeResumen);
-                    log.info("💵 Monto extraído: {}", monto);
 
                     if (detalle == null || monto <= 0) {
                         log.warn("❌ No se pudo extraer el detalle o monto válido del mensaje. Monto: {}", monto);
@@ -165,6 +171,9 @@ public class WebhookController {
                     log.info("📄 Comanda PDF generada: {}", urlComanda);
 
                     watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
+
+                    // ✅ Guardar el último mensaje procesado
+                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
                 }
             } finally {
                 procesamientoEnCurso.remove(telefono);
@@ -192,24 +201,26 @@ public class WebhookController {
             return null;
         }
     }
-private int extraerMontoFlexible(String texto) {
-    try {
-        Pattern pattern = Pattern.compile("\\$\\{(\\\"Total\\\":\\d+\\.?\\d*,\\\"Currency\\\":\\\"[A-Z]+\\\")}");
-        java.util.regex.Matcher matcher = pattern.matcher(texto);
-        if (matcher.find()) {
-            String jsonStr = "{" + matcher.group(1) + "}";
-            log.info("🧾 JSON de monto extraído: {}", jsonStr);
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode node = mapper.readTree(jsonStr);
-            int monto = (int) Math.round(node.path("Total").asDouble(0));
-            log.info("💵 Monto extraído: {}", monto);
-            return monto;
+
+    private int extraerMontoFlexible(String texto) {
+        try {
+            int inicio = texto.indexOf("{\"Total\":");
+            int fin = texto.indexOf("}", inicio);
+            if (inicio != -1 && fin != -1) {
+                String jsonStr = texto.substring(inicio, fin + 1);
+                log.info("🧾 JSON de monto extraído: {}", jsonStr);
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode node = mapper.readTree(jsonStr);
+                int monto = (int) node.path("Total").asDouble(0);
+                log.info("💵 Monto extraído: {}", monto);
+                return monto;
+            }
+        } catch (Exception e) {
+            log.error("❌ Error extrayendo el monto", e);
         }
-    } catch (Exception e) {
-        log.error("❌ Error extrayendo el monto", e);
+        return -1;
     }
-    return -1;
-}
+
     private long obtenerTimestamp(JsonNode msg) {
         if (msg.has("timestamp")) {
             return msg.path("timestamp").asLong(0);
