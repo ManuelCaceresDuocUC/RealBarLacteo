@@ -8,8 +8,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
@@ -45,7 +44,7 @@ public class WebhookController {
 
     @PostMapping("/wati")
     public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
-        log.info("\uD83D\uDCE5 Payload recibido: {}", payload.toPrettyString());
+        log.info("📥 Payload recibido: {}", payload.toPrettyString());
 
         try {
             String tipo = payload.path("type").asText("");
@@ -70,7 +69,7 @@ public class WebhookController {
                 }
 
                 if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
-                    log.info("\uD83D\uDD0D Trigger de carrito detectado para {}", telefono);
+                    log.info("🔍 Trigger de carrito detectado para {}", telefono);
 
                     String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
                     var headers = new org.springframework.http.HttpHeaders();
@@ -91,30 +90,26 @@ public class WebhookController {
                             }
 
                             long triggerTimestamp = payload.path("timestamp").asLong(0);
+                            List<JsonNode> mensajesOrdenados = new ArrayList<>();
+                            mensajes.forEach(mensajesOrdenados::add);
+                            mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
 
-                    List<JsonNode> mensajesOrdenados = new ArrayList<>();
-                    mensajes.forEach(mensajesOrdenados::add);
+                            for (JsonNode msg : mensajesOrdenados) {
+                                long msgTimestamp = obtenerTimestamp(msg);
+                                if (msgTimestamp <= triggerTimestamp) continue;
 
-                    // Ordenar los mensajes por timestamp ASCENDENTE
-                    mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
-                    for (JsonNode msg : mensajesOrdenados) {
-    long msgTimestamp = obtenerTimestamp(msg);
+                                String finalText = msg.path("finalText").asText("");
+                                String text = msg.path("text").asText("");
+                                String contenido = !finalText.isBlank() ? finalText : text;
+                                log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
 
-    if (msgTimestamp <= triggerTimestamp) continue;
-
-    String finalText = msg.path("finalText").asText("");
-    String text = msg.path("text").asText("");
-    String contenido = !finalText.isBlank() ? finalText : text;
-
-    log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
-
-   String contenidoNormalizado = contenido.toLowerCase();
-if (contenidoNormalizado.contains("desde el carrito") && contenidoNormalizado.contains("total estimado")) {
-    log.info("✅ Mensaje resumen encontrado: {}", contenido);
-    mensajeResumen = contenido;
-    break;
-}
-}
+                                String contenidoNormalizado = contenido.toLowerCase();
+                                if (contenidoNormalizado.contains("desde el carrito") && contenidoNormalizado.contains("total estimado")) {
+                                    log.info("✅ Mensaje resumen encontrado: {}", contenido);
+                                    mensajeResumen = contenido;
+                                    break;
+                                }
+                            }
 
                             if (mensajeResumen != null) {
                                 break;
@@ -140,8 +135,8 @@ if (contenidoNormalizado.contains("desde el carrito") && contenidoNormalizado.co
                         return ResponseEntity.ok().build();
                     }
 
-                    String detalle = extraerDetalle(mensajeResumen);
-                    int monto = extraerMonto(mensajeResumen);
+                    String detalle = extraerDetalleFlexible(mensajeResumen);
+                    int monto = extraerMontoFlexible(mensajeResumen);
 
                     if (detalle == null || monto == -1) {
                         log.warn("❌ No se pudo extraer el detalle o monto del mensaje");
@@ -180,40 +175,50 @@ if (contenidoNormalizado.contains("desde el carrito") && contenidoNormalizado.co
         return ResponseEntity.ok().build();
     }
 
-    private String extraerDetalle(String texto) {
+    private String extraerDetalleFlexible(String texto) {
         try {
-            int inicio = texto.indexOf("desde el carrito:") + "desde el carrito:".length();
-            int fin = texto.indexOf("\uD83D\uDCB0 total estimado");
-            if (inicio == -1 || fin == -1 || fin <= inicio) return null;
-            return texto.substring(inicio, fin).trim();
+            String[] lineas = texto.split("\n");
+            StringBuilder sb = new StringBuilder();
+            for (String linea : lineas) {
+                if (linea.contains("×")) {
+                    sb.append(linea.trim()).append("\n");
+                }
+            }
+            return sb.toString().trim();
         } catch (Exception e) {
+            log.error("❌ Error extrayendo detalle", e);
             return null;
         }
     }
 
-    private int extraerMonto(String texto) {
+    private int extraerMontoFlexible(String texto) {
         try {
-            Matcher matcher = Pattern.compile("\\\"Total\\\":(\\d+\\.?\\d*)").matcher(texto);
-            if (matcher.find()) {
-                return (int) Double.parseDouble(matcher.group(1));
+            int inicio = texto.indexOf("${");
+            int fin = texto.indexOf("}", inicio);
+            if (inicio != -1 && fin != -1) {
+                String jsonStr = texto.substring(inicio + 2, fin + 1);
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode node = mapper.readTree(jsonStr);
+                return (int) node.path("Total").asDouble(0);
             }
         } catch (Exception e) {
             log.error("❌ Error extrayendo el monto", e);
         }
         return -1;
     }
+
     private long obtenerTimestamp(JsonNode msg) {
-    if (msg.has("timestamp")) {
-        return msg.path("timestamp").asLong(0);
-    }
-    if (msg.has("created")) {
-        String created = msg.path("created").asText("");
-        try {
-            return java.time.Instant.parse(created).getEpochSecond();
-        } catch (Exception e) {
-            log.warn("❌ No se pudo parsear timestamp desde 'created': {}", created);
+        if (msg.has("timestamp")) {
+            return msg.path("timestamp").asLong(0);
         }
+        if (msg.has("created")) {
+            String created = msg.path("created").asText("");
+            try {
+                return java.time.Instant.parse(created).getEpochSecond();
+            } catch (Exception e) {
+                log.warn("❌ No se pudo parsear timestamp desde 'created': {}", created);
+            }
+        }
+        return 0;
     }
-    return 0;
-}
 }
