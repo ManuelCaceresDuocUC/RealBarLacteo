@@ -92,26 +92,27 @@ public class WebhookController {
 
                             long triggerTimestamp = payload.path("timestamp").asLong(0);
 
-List<JsonNode> mensajesOrdenados = new ArrayList<>();
-mensajes.forEach(mensajesOrdenados::add);
+                    List<JsonNode> mensajesOrdenados = new ArrayList<>();
+                    mensajes.forEach(mensajesOrdenados::add);
 
-// Ordenar los mensajes por timestamp ASCENDENTE
-mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
-        for (JsonNode msg : mensajesOrdenados) {
-            long msgTimestamp = obtenerTimestamp(msg);
+                    // Ordenar los mensajes por timestamp ASCENDENTE
+                    mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
+                    for (JsonNode msg : mensajesOrdenados) {
+                long msgTimestamp = obtenerTimestamp(msg);
 
-            if (msgTimestamp <= triggerTimestamp) continue;
+                // Solo considerar mensajes posteriores al trigger
+                if (msgTimestamp <= triggerTimestamp) continue;
 
-            String contenido = msg.path("finalText").asText("");
-            if (contenido.isEmpty()) {
-                contenido = msg.path("text").asText("");
+                // ✅ Revisar tanto finalText como text
+                String contenido = msg.hasNonNull("finalText") && !msg.path("finalText").asText("").isBlank()
+                    ? msg.path("finalText").asText("")
+                    : msg.path("text").asText("");
+
+                if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+                    mensajeResumen = contenido;
+                    break;
+                }
             }
-
-            if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
-                mensajeResumen = contenido;
-                break;
-            }
-        }
 
 
                             if (mensajeResumen != null) {
