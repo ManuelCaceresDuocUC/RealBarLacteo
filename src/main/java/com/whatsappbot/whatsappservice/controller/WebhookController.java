@@ -92,14 +92,13 @@ public class WebhookController {
 
 for (int i = mensajes.size() - 1; i >= 0; i--) {
     JsonNode msg = mensajes.get(i);
-    long msgTimestamp = msg.path("timestamp").asLong(0);
+    long msgTimestamp = obtenerTimestamp(msg); // <-- usamos función que detecta el timestamp correctamente
 
-    // Solo considerar mensajes posteriores al trigger
-    if (msgTimestamp <= triggerTimestamp) {
-        continue;
-    }
+    if (msgTimestamp <= triggerTimestamp) continue;
 
-    String contenido = msg.path("finalText").asText("");
+    // Usamos finalText si existe, o fallback al campo text
+    String contenido = msg.has("finalText") ? msg.path("finalText").asText("") : msg.path("text").asText("");
+
     if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
         mensajeResumen = contenido;
         break;
@@ -192,4 +191,18 @@ for (int i = mensajes.size() - 1; i >= 0; i--) {
         }
         return -1;
     }
+    private long obtenerTimestamp(JsonNode msg) {
+    if (msg.has("timestamp")) {
+        return msg.path("timestamp").asLong(0);
+    }
+    if (msg.has("created")) {
+        String created = msg.path("created").asText("");
+        try {
+            return java.time.Instant.parse(created).getEpochSecond();
+        } catch (Exception e) {
+            log.warn("❌ No se pudo parsear timestamp desde 'created': {}", created);
+        }
+    }
+    return 0;
+}
 }
