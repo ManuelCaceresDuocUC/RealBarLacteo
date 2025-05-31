@@ -2,6 +2,8 @@ package com.whatsappbot.whatsappservice.controller;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,20 +92,25 @@ public class WebhookController {
 
                             long triggerTimestamp = payload.path("timestamp").asLong(0);
 
-for (int i = mensajes.size() - 1; i >= 0; i--) {
-    JsonNode msg = mensajes.get(i);
-    long msgTimestamp = obtenerTimestamp(msg); // <-- usamos función que detecta el timestamp correctamente
+List<JsonNode> mensajesOrdenados = new ArrayList<>();
+mensajes.forEach(mensajesOrdenados::add);
 
+// Ordenar los mensajes por timestamp ASCENDENTE
+mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
+
+for (JsonNode msg : mensajesOrdenados) {
+    long msgTimestamp = obtenerTimestamp(msg);
+
+    // Solo considerar mensajes posteriores al trigger
     if (msgTimestamp <= triggerTimestamp) continue;
 
-    // Usamos finalText si existe, o fallback al campo text
-    String contenido = msg.has("finalText") ? msg.path("finalText").asText("") : msg.path("text").asText("");
-
+    String contenido = msg.path("finalText").asText("");
     if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
         mensajeResumen = contenido;
         break;
     }
 }
+
 
                             if (mensajeResumen != null) {
                                 break;
