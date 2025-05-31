@@ -88,14 +88,23 @@ public class WebhookController {
                                 return ResponseEntity.ok().build();
                             }
 
-                            for (int i = mensajes.size() - 1; i >= 0; i--) {
-                                JsonNode msg = mensajes.get(i);
-                                String contenido = msg.path("finalText").asText("");
-                                if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
-                                    mensajeResumen = contenido;
-                                    break;
-                                }
-                            }
+                            long triggerTimestamp = payload.path("timestamp").asLong(0);
+
+for (int i = mensajes.size() - 1; i >= 0; i--) {
+    JsonNode msg = mensajes.get(i);
+    long msgTimestamp = msg.path("timestamp").asLong(0);
+
+    // Solo considerar mensajes posteriores al trigger
+    if (msgTimestamp <= triggerTimestamp) {
+        continue;
+    }
+
+    String contenido = msg.path("finalText").asText("");
+    if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+        mensajeResumen = contenido;
+        break;
+    }
+}
 
                             if (mensajeResumen != null) {
                                 break;
