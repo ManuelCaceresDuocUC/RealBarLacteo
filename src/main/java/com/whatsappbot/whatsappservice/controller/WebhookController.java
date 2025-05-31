@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -191,24 +192,24 @@ public class WebhookController {
             return null;
         }
     }
-
-    private int extraerMontoFlexible(String texto) {
-        try {
-            int inicio = texto.indexOf("${");
-            int fin = texto.indexOf("}", inicio);
-            if (inicio != -1 && fin != -1) {
-                String jsonStr = texto.substring(inicio + 2, fin + 1); // ${...} → {...}
-                log.info("🧾 JSON de monto extraído: {}", jsonStr);
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode node = mapper.readTree(jsonStr);
-                return (int) node.path("Total").asDouble(0);
-            }
-        } catch (Exception e) {
-            log.error("❌ Error extrayendo el monto", e);
+private int extraerMontoFlexible(String texto) {
+    try {
+        Pattern pattern = Pattern.compile("\\$\\{(\\\"Total\\\":\\d+\\.?\\d*,\\\"Currency\\\":\\\"[A-Z]+\\\")}");
+        java.util.regex.Matcher matcher = pattern.matcher(texto);
+        if (matcher.find()) {
+            String jsonStr = "{" + matcher.group(1) + "}";
+            log.info("🧾 JSON de monto extraído: {}", jsonStr);
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode node = mapper.readTree(jsonStr);
+            int monto = (int) Math.round(node.path("Total").asDouble(0));
+            log.info("💵 Monto extraído: {}", monto);
+            return monto;
         }
-        return -1;
+    } catch (Exception e) {
+        log.error("❌ Error extrayendo el monto", e);
     }
-
+    return -1;
+}
     private long obtenerTimestamp(JsonNode msg) {
         if (msg.has("timestamp")) {
             return msg.path("timestamp").asLong(0);
