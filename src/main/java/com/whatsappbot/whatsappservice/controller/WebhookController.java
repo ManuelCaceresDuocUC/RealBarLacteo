@@ -62,7 +62,7 @@ public class WebhookController {
                 var entity = new org.springframework.http.HttpEntity<>(headers);
 
                 String mensajeResumen = null;
-                int intentos = 3;
+                int intentos = 6;
 
                 for (int intento = 1; intento <= intentos; intento++) {
                     try {
