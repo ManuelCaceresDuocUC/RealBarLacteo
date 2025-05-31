@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 
@@ -22,4 +23,6 @@ public interface PedidoRepository extends JpaRepository<PedidoEntity, Long> {
 
     // ✅ Agregar este para que compile bien tu controlador
     Optional<PedidoEntity> findByTelefonoAndEstado(String telefono, String estado);
+    @Query("SELECT p FROM PedidoEntity p WHERE p.estado = 'pagado' ORDER BY p.fechaCreacion DESC")
+    Optional<PedidoEntity> findUltimoPedidoPagado();
 }

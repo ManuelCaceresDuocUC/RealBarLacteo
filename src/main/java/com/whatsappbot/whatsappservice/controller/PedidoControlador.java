@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -125,4 +126,10 @@ public ResponseEntity<String> redirigirAWebpay(@RequestParam("token_ws") String 
             .header("Content-Type", "text/html")
             .body(html);
 }*/
+@GetMapping("/api/ultimo-pedido-id")
+public ResponseEntity<?> obtenerUltimoPedidoId() {
+    return pedidoRepository.findUltimoPedidoPagado()
+        .map(pedido -> ResponseEntity.ok(Map.of("pedidoId", pedido.getPedidoId())))
+        .orElse(ResponseEntity.notFound().build());
+}
 }
