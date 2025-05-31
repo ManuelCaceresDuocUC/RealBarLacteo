@@ -97,19 +97,21 @@ mensajes.forEach(mensajesOrdenados::add);
 
 // Ordenar los mensajes por timestamp ASCENDENTE
 mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
+        for (JsonNode msg : mensajesOrdenados) {
+            long msgTimestamp = obtenerTimestamp(msg);
 
-for (JsonNode msg : mensajesOrdenados) {
-    long msgTimestamp = obtenerTimestamp(msg);
+            if (msgTimestamp <= triggerTimestamp) continue;
 
-    // Solo considerar mensajes posteriores al trigger
-    if (msgTimestamp <= triggerTimestamp) continue;
+            String contenido = msg.path("finalText").asText("");
+            if (contenido.isEmpty()) {
+                contenido = msg.path("text").asText("");
+            }
 
-    String contenido = msg.path("finalText").asText("");
-    if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
-        mensajeResumen = contenido;
-        break;
-    }
-}
+            if (contenido.contains("desde el carrito") && contenido.contains("total estimado")) {
+                mensajeResumen = contenido;
+                break;
+            }
+        }
 
 
                             if (mensajeResumen != null) {
