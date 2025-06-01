@@ -167,8 +167,7 @@ public class WebhookController {
                     pedido.setLinkPago(pago.getUrl());
                     pedidoRepository.save(pedido);
 
-                    String urlComanda = comandaService.generarPDF(pedido);
-                    log.info("📄 Comanda PDF generada: {}", urlComanda);
+                    
 
                     watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
 
