@@ -59,7 +59,6 @@ public class WebhookController {
                 return ResponseEntity.ok().build();
             }
 
-            // Evitar reprocesar el mismo mensaje
             if (messageId.isEmpty() || messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) {
                 log.warn("⏳ Mensaje duplicado detectado para {}. Ignorando.", telefono);
                 return ResponseEntity.ok().build();
@@ -85,9 +84,10 @@ public class WebhookController {
                     var entity = new org.springframework.http.HttpEntity<>(headers);
 
                     String mensajeResumen = null;
-                    int intentos = 6;
+                    int maxEsperaSegundos = 30;
+                    int segundosEsperados = 0;
 
-                    for (int intento = 1; intento <= intentos; intento++) {
+                    while (mensajeResumen == null && segundosEsperados < maxEsperaSegundos) {
                         try {
                             var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
                             JsonNode mensajes = response.getBody().path("messages").path("items");
@@ -109,6 +109,7 @@ public class WebhookController {
                                 String finalText = msg.path("finalText").asText("");
                                 String text = msg.path("text").asText("");
                                 String contenido = !finalText.isBlank() ? finalText : text;
+
                                 log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
 
                                 String contenidoNormalizado = contenido.toLowerCase();
@@ -119,20 +120,20 @@ public class WebhookController {
                                 }
                             }
 
-                            if (mensajeResumen != null) {
-                                break;
-                            } else {
-                                log.info("⏳ Intento {}: mensaje de resumen no encontrado, esperando 2 segundos...", intento);
+                            if (mensajeResumen == null) {
+                                log.info("⏳ Aún no aparece el resumen, esperando 2 segundos...");
                                 TimeUnit.SECONDS.sleep(2);
+                                segundosEsperados += 2;
                             }
 
                         } catch (Exception e) {
-                            log.error("❌ Error durante intento {} al obtener mensajes", intento, e);
+                            log.error("❌ Error al buscar mensaje resumen", e);
+                            break;
                         }
                     }
 
                     if (mensajeResumen == null) {
-                        log.warn("⚠️ No se encontró mensaje de resumen posterior al trigger después de varios intentos");
+                        log.warn("⚠️ No se encontró el mensaje de resumen tras {} segundos", segundosEsperados);
                         return ResponseEntity.ok().build();
                     }
 
@@ -167,11 +168,7 @@ public class WebhookController {
                     pedido.setLinkPago(pago.getUrl());
                     pedidoRepository.save(pedido);
 
-                    
-
                     watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
-
-                    // ✅ Guardar el último mensaje procesado
                     ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
                 }
             } finally {

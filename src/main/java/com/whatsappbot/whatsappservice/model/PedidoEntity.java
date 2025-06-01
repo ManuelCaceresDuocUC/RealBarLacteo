@@ -23,7 +23,8 @@ public class PedidoEntity {
 
     @Column(columnDefinition = "TEXT")
     private String detalle;
-
+    @Column(columnDefinition = "TEXT")
+    private String indicaciones;
     @Column(length = 20)
     private String estado;
 
@@ -38,11 +39,13 @@ public class PedidoEntity {
 
     public PedidoEntity() {}
 
-    public PedidoEntity(String pedidoId, String telefono, String detalle) {
+    public PedidoEntity(String pedidoId, String telefono, String detalle, String indicaciones) {
         this.pedidoId = pedidoId;
         this.telefono = telefono;
         this.detalle = detalle;
         this.estado = "pendiente"; // Valor por defecto al crear
+        this.indicaciones = indicaciones;
+
     }
 
     @PrePersist
@@ -55,7 +58,13 @@ public class PedidoEntity {
     public Long getId() {
         return id;
     }
+    public String getIndicaciones() {
+    return indicaciones;
+    }
 
+    public void setIndicaciones(String indicaciones) {
+    this.indicaciones = indicaciones;
+    }
     public String getPedidoId() {
         return pedidoId;
     }

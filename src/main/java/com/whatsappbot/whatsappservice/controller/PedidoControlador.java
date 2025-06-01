@@ -36,38 +36,46 @@ public class PedidoControlador {
     private final ComandaService comandaService;
 
     @PostMapping
-    public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
-        String telefono = payload.get("telefono");
-        String detalle = payload.get("detalle");
+public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
+    String telefono = payload.get("telefono");
+    String detalle = payload.get("detalle");
 
-        if (telefono == null || telefono.isBlank() || detalle == null || detalle.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Faltan datos obligatorios"));
-        }
-
-        String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
-        log.info("📝 Recibido nuevo pedido: telefono={}, detalle={}", telefono, detalle);
-        if (!telefono.startsWith("+")) {
-            telefono = "+" + telefono;
-                }
-        try {
-            PedidoEntity pedido = new PedidoEntity(pedidoId, telefono, detalle);
-            pedidoRepository.save(pedido);
-
-            PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, 1000);
-            String link = pago.getUrl();
-
-String urlComanda = comandaService.generarPDF(pedido);
-watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
-            return ResponseEntity.ok(Map.of(
-                "mensaje", "Pedido creado y link enviado por WhatsApp",
-                "pedidoId", pedidoId,
-                "linkPago", link
-            ));
-        } catch (Exception e) {
-            log.error("❌ Error al crear pedido", e);
-            return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
-        }
+    if (telefono == null || telefono.isBlank() || detalle == null || detalle.isBlank()) {
+        return ResponseEntity.badRequest().body(Map.of("error", "Faltan datos obligatorios"));
     }
+
+    String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+    log.info("📝 Recibido nuevo pedido: telefono={}, detalle={}", telefono, detalle);
+    
+    if (!telefono.startsWith("+")) {
+        telefono = "+" + telefono;
+    }
+
+    try {
+        PedidoEntity pedido = new PedidoEntity();
+        pedido.setPedidoId(pedidoId);
+        pedido.setTelefono(telefono);
+        pedido.setDetalle(detalle);
+        pedido.setIndicaciones(null); // esto luego puede venir desde el flujo de indicaciones
+        pedido.setEstado("pendiente");
+        pedidoRepository.save(pedido);
+
+        PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, 1000);
+        String link = pago.getUrl();
+
+        // ✅ Usamos HashMap para permitir null
+        Map<String, Object> respuesta = new java.util.HashMap<>();
+        respuesta.put("mensaje", "Pedido creado y link enviado por WhatsApp");
+        respuesta.put("pedidoId", pedidoId);
+        respuesta.put("linkPago", link);
+
+        return ResponseEntity.ok(respuesta);
+
+    } catch (Exception e) {
+        log.error("❌ Error al crear pedido", e);
+        return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
+    }
+}
 @RequestMapping(value = "/confirmacion", method = {RequestMethod.GET, RequestMethod.POST})
 public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
     try {
