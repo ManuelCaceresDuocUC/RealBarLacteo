@@ -30,10 +30,12 @@ import com.whatsappbot.whatsappservice.service.WatiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
+// (imports y anotaciones iguales...)
+
 @RestController
 @RequestMapping("/api/webhook")
 @RequiredArgsConstructor
+@Slf4j
 public class WebhookController {
 
     private final WatiService watiService;
@@ -56,20 +58,9 @@ public class WebhookController {
             String texto = payload.path("text").asText().toLowerCase();
             String messageId = payload.path("whatsappMessageId").asText("");
 
-            if (telefono.isEmpty()) {
-                log.warn("❌ Número de teléfono no encontrado en el payload");
-                return ResponseEntity.ok().build();
-            }
-
-            if (messageId.isEmpty() || messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) {
-                log.warn("⏳ Mensaje duplicado detectado para {}. Ignorando.", telefono);
-                return ResponseEntity.ok().build();
-            }
-
-            if (procesamientoEnCurso.putIfAbsent(telefono, true) != null) {
-                log.warn("⏳ Ya hay un proceso en curso para {}. Ignorando trigger duplicado.", telefono);
-                return ResponseEntity.ok().build();
-            }
+            if (telefono.isEmpty()) return ResponseEntity.ok().build();
+            if (messageId.isEmpty() || messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) return ResponseEntity.ok().build();
+            if (procesamientoEnCurso.putIfAbsent(telefono, true) != null) return ResponseEntity.ok().build();
 
             try {
                 // AYUDA
@@ -78,28 +69,36 @@ public class WebhookController {
                     return ResponseEntity.ok().build();
                 }
 
-                // LOCAL: HYATT o CHARLES
+                // 🟩 LOCAL: (tolerante a errores)
                 if ("text".equalsIgnoreCase(tipo) && texto.startsWith("local:")) {
-                    String local = texto.substring(6).trim().toUpperCase();
-                    if (!local.equals("HYATT") && !local.equals("CHARLES")) {
-                        watiService.enviarMensajeTexto(telefono, "❌ Local inválido. Escribe LOCAL: HYATT o LOCAL: CHARLES");
+                    String localIngresado = texto.substring(6).trim().toLowerCase();
+
+                    String localNormalizado = null;
+                    if (localIngresado.contains("hyat")) {
+                        localNormalizado = "HYATT";
+                    } else if (localIngresado.contains("char")) {
+                        localNormalizado = "CHARLES";
+                    }
+
+                    if (localNormalizado == null) {
+                        watiService.enviarMensajeTexto(telefono, "❌ Local inválido. Por favor escribe LOCAL: HYATT o LOCAL: CHARLES");
                         return ResponseEntity.ok().build();
                     }
 
                     PedidoEntity pedido = pedidoRepository.findTopByTelefonoOrderByFechaCreacionDesc(telefono);
                     if (pedido != null && pedido.getEstado().equals("pendiente") && pedido.getLocal() == null) {
-                        pedido.setLocal(local);
+                        pedido.setLocal(localNormalizado);
                         pedidoRepository.save(pedido);
-                        watiService.enviarMensajeTexto(telefono, "✅ Se ha registrado el local: " + local);
+                        watiService.enviarMensajeTexto(telefono, "✅ Se ha registrado el local: " + localNormalizado);
                     } else {
-                        watiService.enviarMensajeTexto(telefono, "⚠️ No se encontró un pedido reciente pendiente o ya tiene local asignado.");
+                        watiService.enviarMensajeTexto(telefono, "⚠️ No se encontró un pedido pendiente o ya tiene local asignado.");
                     }
 
                     ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
                     return ResponseEntity.ok().build();
                 }
 
-                // PEDIDO desde carrito
+                // #trigger_view_cart
                 if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
                     log.info("🔍 Trigger de carrito detectado para {}", telefono);
 
@@ -121,7 +120,6 @@ public class WebhookController {
                             mensajes = response.getBody().path("messages").path("items");
 
                             if (mensajes == null || !mensajes.isArray()) {
-                                log.warn("❌ No hay mensajes disponibles");
                                 TimeUnit.SECONDS.sleep(2);
                                 continue;
                             }
@@ -139,22 +137,16 @@ public class WebhookController {
                                 String contenido = !finalText.isBlank() ? finalText : textMsg;
                                 String contenidoLower = contenido.toLowerCase();
 
-                                log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
-
                                 if (contenidoLower.contains("desde el carrito") && contenidoLower.contains("total estimado")) {
                                     mensajeResumen = contenido;
                                 }
 
                                 if (contenidoLower.startsWith("indicacion:") && indicacion == null) {
                                     indicacion = contenido.substring(contenido.indexOf(":") + 1).trim();
-                                    log.info("✍️ Indicacion detectada: {}", indicacion);
                                 }
                             }
 
-                            if (mensajeResumen == null) {
-                                log.info("⏳ Esperando mensaje resumen... (2s)");
-                                TimeUnit.SECONDS.sleep(2);
-                            }
+                            if (mensajeResumen == null) TimeUnit.SECONDS.sleep(2);
 
                         } catch (Exception e) {
                             log.error("❌ Error al obtener mensajes", e);
@@ -164,18 +156,12 @@ public class WebhookController {
 
                     List<PedidoEntity> recientes = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
                             telefono, "pendiente", LocalDateTime.now().minusMinutes(5));
-                    if (!recientes.isEmpty()) {
-                        log.warn("⏳ Ya existe un pedido reciente para {}", telefono);
-                        return ResponseEntity.ok().build();
-                    }
+                    if (!recientes.isEmpty()) return ResponseEntity.ok().build();
 
                     String detalle = extraerDetalleFlexible(mensajeResumen);
                     int monto = extraerMontoFlexible(mensajeResumen);
 
-                    if (detalle == null || monto <= 0) {
-                        log.warn("❌ Error al extraer detalle o monto del resumen");
-                        return ResponseEntity.ok().build();
-                    }
+                    if (detalle == null || monto <= 0) return ResponseEntity.ok().build();
 
                     String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                     PedidoEntity pedido = new PedidoEntity();
@@ -219,7 +205,6 @@ public class WebhookController {
             }
             return sb.toString().trim();
         } catch (Exception e) {
-            log.error("❌ Error extrayendo detalle", e);
             return null;
         }
     }
@@ -230,12 +215,9 @@ public class WebhookController {
             int fin = texto.indexOf("}", inicio);
             if (inicio != -1 && fin != -1) {
                 String jsonStr = texto.substring(inicio, fin + 1);
-                log.info("🧾 JSON de monto extraído: {}", jsonStr);
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode node = mapper.readTree(jsonStr);
-                int monto = (int) node.path("Total").asDouble(0);
-                log.info("💵 Monto extraído: {}", monto);
-                return monto;
+                return (int) node.path("Total").asDouble(0);
             }
         } catch (Exception e) {
             log.error("❌ Error extrayendo el monto", e);
@@ -244,17 +226,15 @@ public class WebhookController {
     }
 
     private long obtenerTimestamp(JsonNode msg) {
-        if (msg.has("timestamp")) {
-            return msg.path("timestamp").asLong(0);
-        }
+        if (msg.has("timestamp")) return msg.path("timestamp").asLong(0);
         if (msg.has("created")) {
-            String created = msg.path("created").asText("");
             try {
-                return java.time.Instant.parse(created).getEpochSecond();
+                return java.time.Instant.parse(msg.path("created").asText("")).getEpochSecond();
             } catch (Exception e) {
-                log.warn("❌ No se pudo parsear timestamp desde 'created': {}", created);
+                return 0;
             }
         }
         return 0;
     }
 }
+
