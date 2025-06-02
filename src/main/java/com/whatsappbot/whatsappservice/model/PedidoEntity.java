@@ -23,8 +23,10 @@ public class PedidoEntity {
 
     @Column(columnDefinition = "TEXT")
     private String detalle;
+
     @Column(columnDefinition = "TEXT")
     private String indicaciones;
+
     @Column(length = 20)
     private String estado;
 
@@ -37,15 +39,18 @@ public class PedidoEntity {
     @Column(name = "fecha_creacion", columnDefinition = "DATETIME")
     private LocalDateTime fechaCreacion;
 
+    // 🟩 Nuevo campo para el local
+    @Column(name = "local", length = 20)
+    private String local;
+
     public PedidoEntity() {}
 
     public PedidoEntity(String pedidoId, String telefono, String detalle, String indicaciones) {
         this.pedidoId = pedidoId;
         this.telefono = telefono;
         this.detalle = detalle;
-        this.estado = "pendiente"; // Valor por defecto al crear
+        this.estado = "pendiente";
         this.indicaciones = indicaciones;
-
     }
 
     @PrePersist
@@ -53,18 +58,12 @@ public class PedidoEntity {
         this.fechaCreacion = LocalDateTime.now();
     }
 
-    // Getters y setters
+    // Getters y Setters
 
     public Long getId() {
         return id;
     }
-    public String getIndicaciones() {
-    return indicaciones;
-    }
 
-    public void setIndicaciones(String indicaciones) {
-    this.indicaciones = indicaciones;
-    }
     public String getPedidoId() {
         return pedidoId;
     }
@@ -87,6 +86,14 @@ public class PedidoEntity {
 
     public void setDetalle(String detalle) {
         this.detalle = detalle;
+    }
+
+    public String getIndicaciones() {
+        return indicaciones;
+    }
+
+    public void setIndicaciones(String indicaciones) {
+        this.indicaciones = indicaciones;
     }
 
     public String getEstado() {
@@ -119,5 +126,14 @@ public class PedidoEntity {
 
     public void setFechaCreacion(LocalDateTime fechaCreacion) {
         this.fechaCreacion = fechaCreacion;
+    }
+
+    // 🟩 Getter y Setter para el local
+    public String getLocal() {
+        return local;
+    }
+
+    public void setLocal(String local) {
+        this.local = local;
     }
 }

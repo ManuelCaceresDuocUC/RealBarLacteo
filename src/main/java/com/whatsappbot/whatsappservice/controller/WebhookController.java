@@ -1,6 +1,6 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.time.LocalDateTime; // ✅ Esta es la correcta
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -72,11 +72,34 @@ public class WebhookController {
             }
 
             try {
+                // AYUDA
                 if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
                     watiService.enviarTemplateAyuda(telefono, nombre);
                     return ResponseEntity.ok().build();
                 }
 
+                // LOCAL: HYATT o CHARLES
+                if ("text".equalsIgnoreCase(tipo) && texto.startsWith("local:")) {
+                    String local = texto.substring(6).trim().toUpperCase();
+                    if (!local.equals("HYATT") && !local.equals("CHARLES")) {
+                        watiService.enviarMensajeTexto(telefono, "❌ Local inválido. Escribe LOCAL: HYATT o LOCAL: CHARLES");
+                        return ResponseEntity.ok().build();
+                    }
+
+                    PedidoEntity pedido = pedidoRepository.findTopByTelefonoOrderByFechaCreacionDesc(telefono);
+                    if (pedido != null && pedido.getEstado().equals("pendiente") && pedido.getLocal() == null) {
+                        pedido.setLocal(local);
+                        pedidoRepository.save(pedido);
+                        watiService.enviarMensajeTexto(telefono, "✅ Se ha registrado el local: " + local);
+                    } else {
+                        watiService.enviarMensajeTexto(telefono, "⚠️ No se encontró un pedido reciente pendiente o ya tiene local asignado.");
+                    }
+
+                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                    return ResponseEntity.ok().build();
+                }
+
+                // PEDIDO desde carrito
                 if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
                     log.info("🔍 Trigger de carrito detectado para {}", telefono);
 
@@ -173,6 +196,7 @@ public class WebhookController {
 
                     ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
                 }
+
             } finally {
                 procesamientoEnCurso.remove(telefono);
             }

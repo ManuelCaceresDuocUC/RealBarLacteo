@@ -25,4 +25,5 @@ public interface PedidoRepository extends JpaRepository<PedidoEntity, Long> {
     Optional<PedidoEntity> findByTelefonoAndEstado(String telefono, String estado);
     @Query("SELECT p FROM PedidoEntity p WHERE p.estado = 'pagado' ORDER BY p.fechaCreacion DESC")
     Optional<PedidoEntity> findUltimoPedidoPagado();
+     PedidoEntity findTopByTelefonoOrderByFechaCreacionDesc(String telefono);
 }
