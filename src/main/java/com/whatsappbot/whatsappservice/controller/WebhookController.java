@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
+import com.whatsappbot.whatsappservice.repository.ProductoStockRepository;
 import com.whatsappbot.whatsappservice.service.ComandaService;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
@@ -36,6 +37,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequestMapping("/api/webhook")
 @RequiredArgsConstructor
 @Slf4j
+
 public class WebhookController {
 
     private final WatiService watiService;
@@ -43,6 +45,7 @@ public class WebhookController {
     private final TransbankService transbankService;
     private final ComandaService comandaService;
     private final RestTemplate restTemplate = new RestTemplate();
+    private final ProductoStockRepository productoStockRepository;
 
     private static final ConcurrentHashMap<String, Boolean> procesamientoEnCurso = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, String> ultimoMensajeProcesadoPorNumero = new ConcurrentHashMap<>();
@@ -162,7 +165,14 @@ public class WebhookController {
                     int monto = extraerMontoFlexible(mensajeResumen);
 
                     if (detalle == null || monto <= 0) return ResponseEntity.ok().build();
-
+                    List<String> productos = extraerProductosDesdeDetalle(detalle);
+                    for (String producto : productos) {
+                        var stock = productoStockRepository.findByNombreIgnoreCase(producto);
+                        if (stock.isPresent() && !stock.get().getDisponible()) {
+                            watiService.enviarMensajeTexto(telefono, "❌ El producto '" + producto + "' no está disponible en este momento. Por favor edita tu pedido.");
+                            return ResponseEntity.ok().build();
+                        }
+                    }
                     String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                     PedidoEntity pedido = new PedidoEntity();
                     pedido.setPedidoId(pedidoId);
@@ -173,7 +183,7 @@ public class WebhookController {
                     pedido.setMonto((double) monto);
                     pedido.setFechaCreacion(LocalDateTime.now(ZoneId.of("America/Santiago")));
                     pedidoRepository.save(pedido);
-
+                    
                     PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
                     pedido.setLinkPago(pago.getUrl());
                     pedidoRepository.save(pedido);
@@ -236,5 +246,20 @@ public class WebhookController {
         }
         return 0;
     }
+    private List<String> extraerProductosDesdeDetalle(String detalle) {
+    List<String> productos = new ArrayList<>();
+    String[] lineas = detalle.split("\n");
+
+    for (String linea : lineas) {
+        if (linea.contains("×")) {
+            String[] partes = linea.split("×");
+            if (partes.length == 2) {
+                productos.add(partes[1].trim().toLowerCase());
+            }
+        }
+    }
+
+    return productos;
+}
 }
 
