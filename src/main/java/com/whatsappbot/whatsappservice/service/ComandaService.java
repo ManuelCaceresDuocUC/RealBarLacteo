@@ -36,8 +36,9 @@ public class ComandaService {
             PdfWriter.getInstance(documento, baos);
             documento.open();
 
-            Font bold = FontFactory.getFont(FontFactory.COURIER_BOLD, 8);
-            Font normal = FontFactory.getFont(FontFactory.COURIER, 7);
+            Font bold = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10);
+            Font normal = FontFactory.getFont(FontFactory.HELVETICA, 9);
+
             DecimalFormat df = new DecimalFormat("#,##0");
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
