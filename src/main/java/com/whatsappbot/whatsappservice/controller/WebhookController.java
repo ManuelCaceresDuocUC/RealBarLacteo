@@ -44,143 +44,143 @@ public class WebhookController {
     private static final ConcurrentHashMap<String, String> ultimoMensajeProcesadoPorNumero = new ConcurrentHashMap<>();
 
     @PostMapping("/wati")
-    public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
-        log.info("📥 Payload recibido: {}", payload.toPrettyString());
+public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
+    log.info("📥 Payload recibido: {}", payload.toPrettyString());
+
+    try {
+        String tipo = payload.path("type").asText("");
+        String telefono = payload.path("waId").asText("");
+        String nombre = payload.path("senderName").asText("Cliente");
+        String texto = payload.path("text").asText().toLowerCase();
+        String messageId = payload.path("whatsappMessageId").asText("");
+
+        if (telefono.isEmpty()) {
+            log.warn("❌ Número de teléfono no encontrado en el payload");
+            return ResponseEntity.ok().build();
+        }
+
+        if (messageId.isEmpty() || messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) {
+            log.warn("⏳ Mensaje duplicado detectado para {}. Ignorando.", telefono);
+            return ResponseEntity.ok().build();
+        }
+
+        if (procesamientoEnCurso.putIfAbsent(telefono, true) != null) {
+            log.warn("⏳ Ya hay un proceso en curso para {}. Ignorando trigger duplicado.", telefono);
+            return ResponseEntity.ok().build();
+        }
 
         try {
-            String tipo = payload.path("type").asText("");
-            String telefono = payload.path("waId").asText("");
-            String nombre = payload.path("senderName").asText("Cliente");
-            String texto = payload.path("text").asText().toLowerCase();
-            String messageId = payload.path("whatsappMessageId").asText("");
-
-            if (telefono.isEmpty()) {
-                log.warn("❌ Número de teléfono no encontrado en el payload");
+            if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
+                watiService.enviarTemplateAyuda(telefono, nombre);
                 return ResponseEntity.ok().build();
             }
 
-            if (messageId.isEmpty() || messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) {
-                log.warn("⏳ Mensaje duplicado detectado para {}. Ignorando.", telefono);
-                return ResponseEntity.ok().build();
-            }
+            if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
+                log.info("🔍 Trigger de carrito detectado para {}", telefono);
 
-            if (procesamientoEnCurso.putIfAbsent(telefono, true) != null) {
-                log.warn("⏳ Ya hay un proceso en curso para {}. Ignorando trigger duplicado.", telefono);
-                return ResponseEntity.ok().build();
-            }
+                String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
+                var headers = new org.springframework.http.HttpHeaders();
+                headers.set("Authorization", "Bearer " + System.getenv("WATI_API_KEY"));
+                var entity = new org.springframework.http.HttpEntity<>(headers);
 
-            try {
-                if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
-                    watiService.enviarTemplateAyuda(telefono, nombre);
+                String mensajeResumen = null;
+                long startTime = System.currentTimeMillis();
+
+                while (mensajeResumen == null && System.currentTimeMillis() - startTime < 30000) {
+                    try {
+                        var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
+                        JsonNode mensajes = response.getBody().path("messages").path("items");
+
+                        if (mensajes == null || !mensajes.isArray()) {
+                            log.warn("❌ No se pudo obtener historial de mensajes o no hay mensajes");
+                            TimeUnit.SECONDS.sleep(2);
+                            continue;
+                        }
+
+                        long triggerTimestamp = payload.path("timestamp").asLong(0);
+                        List<JsonNode> mensajesOrdenados = new ArrayList<>();
+                        mensajes.forEach(mensajesOrdenados::add);
+                        mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
+
+                        for (JsonNode msg : mensajesOrdenados) {
+                            long msgTimestamp = obtenerTimestamp(msg);
+                            if (msgTimestamp <= triggerTimestamp) continue;
+
+                            String finalText = msg.path("finalText").asText("");
+                            String text = msg.path("text").asText("");
+                            String contenido = !finalText.isBlank() ? finalText : text;
+                            log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
+
+                            String contenidoNormalizado = contenido.toLowerCase();
+                            if (contenidoNormalizado.contains("desde el carrito") && contenidoNormalizado.contains("total estimado")) {
+                                log.info("✅ Mensaje resumen encontrado: {}", contenido);
+                                mensajeResumen = contenido;
+                                break;
+                            }
+                        }
+
+                        if (mensajeResumen == null) {
+                            log.info("⏳ Esperando mensaje de resumen... reintentando");
+                            TimeUnit.SECONDS.sleep(2);
+                        }
+
+                    } catch (Exception e) {
+                        log.error("❌ Error al obtener mensajes", e);
+                        TimeUnit.SECONDS.sleep(2);
+                    }
+                }
+
+                if (mensajeResumen == null) {
+                    log.warn("⚠️ No se encontró mensaje de resumen posterior al trigger después de 30 segundos");
                     return ResponseEntity.ok().build();
                 }
 
-                if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
-                    log.info("🔍 Trigger de carrito detectado para {}", telefono);
-
-                    String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
-                    var headers = new org.springframework.http.HttpHeaders();
-                    headers.set("Authorization", "Bearer " + System.getenv("WATI_API_KEY"));
-                    var entity = new org.springframework.http.HttpEntity<>(headers);
-
-                    String mensajeResumen = null;
-                    int maxEsperaSegundos = 30;
-                    int segundosEsperados = 0;
-
-                    while (mensajeResumen == null && segundosEsperados < maxEsperaSegundos) {
-                        try {
-                            var response = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, JsonNode.class);
-                            JsonNode mensajes = response.getBody().path("messages").path("items");
-
-                            if (mensajes == null || !mensajes.isArray()) {
-                                log.warn("❌ No se pudo obtener historial de mensajes o no hay mensajes");
-                                return ResponseEntity.ok().build();
-                            }
-
-                            long triggerTimestamp = payload.path("timestamp").asLong(0);
-                            List<JsonNode> mensajesOrdenados = new ArrayList<>();
-                            mensajes.forEach(mensajesOrdenados::add);
-                            mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
-
-                            for (JsonNode msg : mensajesOrdenados) {
-                                long msgTimestamp = obtenerTimestamp(msg);
-                                if (msgTimestamp <= triggerTimestamp) continue;
-
-                                String finalText = msg.path("finalText").asText("");
-                                String text = msg.path("text").asText("");
-                                String contenido = !finalText.isBlank() ? finalText : text;
-
-                                log.info("📩 Revisando mensaje con timestamp {} -> contenido: {}", msgTimestamp, contenido);
-
-                                String contenidoNormalizado = contenido.toLowerCase();
-                                if (contenidoNormalizado.contains("desde el carrito") && contenidoNormalizado.contains("total estimado")) {
-                                    log.info("✅ Mensaje resumen encontrado: {}", contenido);
-                                    mensajeResumen = contenido;
-                                    break;
-                                }
-                            }
-
-                            if (mensajeResumen == null) {
-                                log.info("⏳ Aún no aparece el resumen, esperando 2 segundos...");
-                                TimeUnit.SECONDS.sleep(2);
-                                segundosEsperados += 2;
-                            }
-
-                        } catch (Exception e) {
-                            log.error("❌ Error al buscar mensaje resumen", e);
-                            break;
-                        }
-                    }
-
-                    if (mensajeResumen == null) {
-                        log.warn("⚠️ No se encontró el mensaje de resumen tras {} segundos", segundosEsperados);
-                        return ResponseEntity.ok().build();
-                    }
-
-                    List<PedidoEntity> recientes = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
-                            telefono, "pendiente", LocalDateTime.now().minusMinutes(5));
-                    if (!recientes.isEmpty()) {
-                        log.warn("⏳ Ya existe un pedido reciente para {}", telefono);
-                        return ResponseEntity.ok().build();
-                    }
-
-                    String detalle = extraerDetalleFlexible(mensajeResumen);
-                    int monto = extraerMontoFlexible(mensajeResumen);
-
-                    if (detalle == null || monto <= 0) {
-                        log.warn("❌ No se pudo extraer el detalle o monto válido del mensaje. Monto: {}", monto);
-                        return ResponseEntity.ok().build();
-                    }
-
-                    String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
-                    PedidoEntity pedido = new PedidoEntity();
-                    pedido.setPedidoId(pedidoId);
-                    pedido.setTelefono(telefono);
-                    pedido.setDetalle(detalle);
-                    pedido.setEstado("pendiente");
-                    pedido.setMonto((double) monto);
-                    pedido.setFechaCreacion(LocalDateTime.now(ZoneId.of("America/Santiago")));
-
-                    pedidoRepository.save(pedido);
-                    log.info("📝 Pedido guardado: {}", pedidoId);
-
-                    PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
-                    pedido.setLinkPago(pago.getUrl());
-                    pedidoRepository.save(pedido);
-
-                    watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
-                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                List<PedidoEntity> recientes = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
+                        telefono, "pendiente", LocalDateTime.now().minusMinutes(5));
+                if (!recientes.isEmpty()) {
+                    log.warn("⏳ Ya existe un pedido reciente para {}", telefono);
+                    return ResponseEntity.ok().build();
                 }
-            } finally {
-                procesamientoEnCurso.remove(telefono);
+
+                String detalle = extraerDetalleFlexible(mensajeResumen);
+                int monto = extraerMontoFlexible(mensajeResumen);
+
+                if (detalle == null || monto <= 0) {
+                    log.warn("❌ No se pudo extraer el detalle o monto válido del mensaje. Monto: {}", monto);
+                    return ResponseEntity.ok().build();
+                }
+
+                String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+                PedidoEntity pedido = new PedidoEntity();
+                pedido.setPedidoId(pedidoId);
+                pedido.setTelefono(telefono);
+                pedido.setDetalle(detalle);
+                pedido.setEstado("pendiente");
+                pedido.setMonto((double) monto);
+                pedido.setFechaCreacion(LocalDateTime.now(ZoneId.of("America/Santiago")));
+                pedidoRepository.save(pedido);
+
+                log.info("📝 Pedido guardado: {}", pedidoId);
+
+                PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
+                pedido.setLinkPago(pago.getUrl());
+                pedidoRepository.save(pedido);
+
+                watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
+
+                ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
             }
 
-        } catch (Exception e) {
-            log.error("❌ Error procesando webhook", e);
+        } finally {
+            procesamientoEnCurso.remove(telefono);
         }
 
-        return ResponseEntity.ok().build();
+    } catch (Exception e) {
+        log.error("❌ Error procesando webhook", e);
     }
+
+    return ResponseEntity.ok().build();
+}
 
     private String extraerDetalleFlexible(String texto) {
         try {
