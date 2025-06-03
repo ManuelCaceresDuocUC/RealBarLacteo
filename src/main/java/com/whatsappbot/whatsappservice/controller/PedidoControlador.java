@@ -88,19 +88,22 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
             pedido.setEstado("pagado");
             pedidoRepository.save(pedido);
 
-            // ✅ Generar PDF de la comanda
-            
-String urlComanda = comandaService.generarPDF(pedido);
-System.out.println("🔗 URL comanda generada: " + urlComanda);
-System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
+            // ✅ Recargar el pedido actualizado para asegurar que incluya el LOCAL
+            pedido = pedidoRepository.findByPedidoId(buyOrder).orElseThrow();
+
+            // ✅ Generar PDF de la comanda con datos actualizados
+            String urlComanda = comandaService.generarPDF(pedido);
+            System.out.println("🔗 URL comanda generada: " + urlComanda);
+            System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
 
             // ✅ Enviar plantilla simple de confirmación por WhatsApp
-if (urlComanda != null) {
-    watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
-} else {
-    log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
-    watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
-}
+            if (urlComanda != null) {
+                watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
+            } else {
+                log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
+                watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
+            }
+
             log.info("✅ Pago confirmado para pedido {}", buyOrder);
             return ResponseEntity.ok("✅ Pago confirmado, comanda generada y mensaje enviado.");
         } else {
@@ -111,6 +114,7 @@ if (urlComanda != null) {
         return ResponseEntity.status(500).body("❌ Error interno: " + e.getMessage());
     }
 }
+
 
 
 /*@GetMapping("/webpay-redireccion")
