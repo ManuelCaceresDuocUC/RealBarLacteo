@@ -67,36 +67,40 @@ public class WatiService {
     enviarPostWati(url, data, "plantilla de ayuda");
 }
 
-    // ✅ Enviar mensaje de texto libre (requiere sesión iniciada)
-    public void enviarMensajeTexto(String telefono, String mensaje) throws IOException {
-    // ✅ Limpiar el número para asegurar formato correcto
-    telefono = telefono.replaceAll("[^\\d]", "");
+    public void enviarMensajeTexto(String telefono, String mensaje) {
+    String url = watiApiUrl + "/api/v1/sendSessionMessage?whatsappNumber=" + telefono;
 
-    // ✅ Endpoint correcto según la API de WATI (usa {whatsappNumber} en la ruta)
-    String url = watiApiUrl + "/api/v1/sendSessionMessage/" + telefono;
-
-    // ✅ Construir cuerpo del mensaje
     Map<String, String> data = new HashMap<>();
     data.put("message", mensaje);
 
-    String json = mapper.writeValueAsString(data);
+    try {
+        String json = mapper.writeValueAsString(data);
 
-    // ✅ Preparar request HTTP
-    RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
-    Request request = new Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer " + apiKey)
-            .addHeader("Content-Type", "application/json")
-            .post(body)
-            .build();
+        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+        Request request = new Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(body)
+                .build();
 
-    // ✅ Ejecutar petición y manejar error
-    try (Response response = client.newCall(request).execute()) {
-        if (!response.isSuccessful()) {
-            throw new IOException("❌ Error al enviar mensaje de texto WATI: Código " + response.code() + " - " + response.body().string());
+        try (Response response = client.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "sin contenido";
+
+            if (!response.isSuccessful()) {
+                System.err.println("❌ Error al enviar mensaje por WATI");
+                System.err.println("Código: " + response.code());
+                System.err.println("Respuesta: " + responseBody);
+            } else {
+                System.out.println("✅ Mensaje enviado correctamente por WATI: " + responseBody);
+            }
         }
+    } catch (Exception e) {
+        System.err.println("❌ Excepción al enviar mensaje WATI:");
+        e.printStackTrace();
     }
 }
+
 
 
     // 🔁 Método común para plantillas
