@@ -68,20 +68,18 @@ public class WatiService {
 }
 
     public void enviarMensajeTexto(String telefono, String mensaje) {
-    String url = watiApiUrl + "/api/v1/sendSessionMessage?whatsappNumber=" + telefono;
-
-    Map<String, String> data = new HashMap<>();
-    data.put("message", mensaje);
-
     try {
-        String json = mapper.writeValueAsString(data);
+        telefono = telefono.replace("+", ""); // Limpieza
 
-        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+        // 🟢 Endpoint correcto con tenantId y número en el path, y el mensaje como query param
+        String url = watiApiUrl + "/" + tenantId + "/api/v1/sendSessionMessage/" + telefono
+                + "?messageText=" + java.net.URLEncoder.encode(mensaje, java.nio.charset.StandardCharsets.UTF_8);
+
         Request request = new Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer " + apiKey)
                 .addHeader("Content-Type", "application/json")
-                .post(body)
+                .post(RequestBody.create("", null)) // Body vacío como requiere WATI
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -100,6 +98,7 @@ public class WatiService {
         e.printStackTrace();
     }
 }
+
 
 
 
