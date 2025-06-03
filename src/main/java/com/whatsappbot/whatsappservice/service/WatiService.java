@@ -36,7 +36,7 @@ public class WatiService {
     public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkComanda) throws IOException {
     telefono = telefono.replace("+", ""); // Limpieza de formato
 
-    String url = watiApiUrl + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+    String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "confirmacion_pedido_link");
@@ -166,7 +166,7 @@ public class WatiService {
     public void enviarTemplateConfirmacionSimple(String telefono, String nombre) throws IOException {
     telefono = telefono.replace("+", "");
 
-    String url = watiApiUrl + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
+    String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
     Map<String, Object> data = new HashMap<>();
     data.put("template_name", "confirmacion_pedido");
