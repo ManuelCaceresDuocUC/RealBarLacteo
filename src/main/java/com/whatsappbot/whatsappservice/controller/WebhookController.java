@@ -170,8 +170,15 @@ public class WebhookController {
                     var stock = productoStockRepository.findByNombreIgnoreCase(producto);
                     if (stock.isPresent() && !stock.get().getDisponible()) {
                         System.out.println("⛔ Producto no disponible detectado: " + producto);
-                        watiService.enviarMensajeTexto(telefono, "❌ El producto '" + producto + "' no está disponible en este momento. Por favor edita tu pedido.");
-                        return ResponseEntity.ok().build(); // 🧠 Detiene el flujo
+
+                        try {
+                            watiService.enviarMensajeTexto(telefono, "❌ El producto '" + producto + "' no está disponible en este momento. Por favor edita tu pedido.");
+                        } catch (Exception e) {
+                            System.err.println("❌ No se pudo enviar el mensaje de advertencia:");
+                            e.printStackTrace(); // imprime error en logs
+                        }
+
+                        return ResponseEntity.ok().build(); // 🔒 Detiene el flujo
                     }
                 }
                     String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
