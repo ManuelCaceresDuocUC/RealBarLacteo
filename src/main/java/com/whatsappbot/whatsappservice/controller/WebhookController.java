@@ -167,12 +167,13 @@ public class WebhookController {
                     if (detalle == null || monto <= 0) return ResponseEntity.ok().build();
                     List<String> productos = extraerProductosDesdeDetalle(detalle);
                     for (String producto : productos) {
-                        var stock = productoStockRepository.findByNombreIgnoreCase(producto);
-                        if (stock.isPresent() && !stock.get().getDisponible()) {
-                            watiService.enviarMensajeTexto(telefono, "❌ El producto '" + producto + "' no está disponible en este momento. Por favor edita tu pedido.");
-                            return ResponseEntity.ok().build();
-                        }
+                    var stock = productoStockRepository.findByNombreIgnoreCase(producto);
+                    if (stock.isPresent() && !stock.get().getDisponible()) {
+                        System.out.println("⛔ Producto no disponible detectado: " + producto);
+                        watiService.enviarMensajeTexto(telefono, "❌ El producto '" + producto + "' no está disponible en este momento. Por favor edita tu pedido.");
+                        return ResponseEntity.ok().build(); // 🧠 Detiene el flujo
                     }
+                }
                     String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
                     PedidoEntity pedido = new PedidoEntity();
                     pedido.setPedidoId(pedidoId);
