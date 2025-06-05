@@ -55,7 +55,7 @@ public class PedidoEntity {
 
     @PrePersist
     protected void onCreate() {
-        this.fechaCreacion = LocalDateTime.now();
+    this.fechaCreacion = LocalDateTime.now(java.time.ZoneId.of("America/Santiago"));
     }
 
     // Getters y Setters
