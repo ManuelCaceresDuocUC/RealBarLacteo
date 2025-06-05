@@ -58,9 +58,9 @@ public class WebhookController {
 
         // ✅ Paso 1: Trigger desde el carrito
         if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
-            log.info("\uD83D\uDE80 Trigger recibido. Se inició el pedido temporal para {}", telefono);
+            log.info("🚀 Trigger recibido. Se inició el pedido temporal para {}", telefono);
             PedidoEntity pedido = new PedidoEntity();
-            pedido.setPedidoId("pedido-" + UUID.randomUUID());
+            pedido.setPedidoId(generarPedidoIdSeguro()); // ✅ Usamos método seguro
             pedido.setTelefono(telefono);
             pedidoTemporalPorTelefono.put(telefono, pedido);
             return ResponseEntity.ok().build();
@@ -73,7 +73,7 @@ public class WebhookController {
 
             if (title.equals("hyatt") || title.equals("charles")) {
                 String localNormalizado = title.equals("hyatt") ? "HYATT" : "CHARLES";
-                log.info("\u2705 Local {} asignado al pedido temporal de {}", localNormalizado, telefono);
+                log.info("✅ Local {} asignado al pedido temporal de {}", localNormalizado, telefono);
 
                 PedidoEntity pedido = pedidoTemporalPorTelefono.get(telefono);
                 if (pedido == null) {
@@ -156,7 +156,7 @@ public class WebhookController {
                 pedido.setEstado("pendiente");
                 pedidoRepository.save(pedido);
 
-                PagoResponseDTO pago = transbankService.generarLinkDePago(pedido.getPedidoId(), monto);
+                PagoResponseDTO pago = transbankService.generarLinkDePago(pedido.getPedidoId(), monto); // ✅ seguro
                 pedido.setLinkPago(pago.getUrl());
                 pedidoRepository.save(pedido);
 
@@ -175,6 +175,12 @@ public class WebhookController {
         return ResponseEntity.ok().build();
     }
 
+    // ✅ Método seguro para crear ID único y corto
+    private String generarPedidoIdSeguro() {
+        return "pedido-" + UUID.randomUUID().toString().replace("-", "").substring(0, 18);
+    }
+
+    // Métodos utilitarios (sin cambios)
     private String extraerDetalleFlexible(String texto) {
         try {
             String[] lineas = texto.split("\n");
@@ -210,8 +216,7 @@ public class WebhookController {
         if (msg.has("timestamp")) return msg.path("timestamp").asLong(0);
         if (msg.has("created")) {
             try {
-                return java.time.Instant.parse(msg.path("created").asText(""))
-                        .getEpochSecond();
+                return java.time.Instant.parse(msg.path("created").asText("")).getEpochSecond();
             } catch (Exception e) {
                 return 0;
             }
