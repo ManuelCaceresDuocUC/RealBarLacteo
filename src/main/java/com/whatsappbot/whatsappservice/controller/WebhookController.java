@@ -1,17 +1,13 @@
+// WebhookController actualizado y ordenado con comentarios
 package com.whatsappbot.whatsappservice.controller;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,13 +28,10 @@ import com.whatsappbot.whatsappservice.service.WatiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-// (imports y anotaciones iguales...)
-
 @RestController
 @RequestMapping("/api/webhook")
 @RequiredArgsConstructor
 @Slf4j
-
 public class WebhookController {
 
     private final WatiService watiService;
@@ -48,164 +41,120 @@ public class WebhookController {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ProductoStockRepository productoStockRepository;
 
+    // Control de concurrencia y almacenamiento temporal por teléfono
     private static final ConcurrentHashMap<String, Boolean> procesamientoEnCurso = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, String> ultimoMensajeProcesadoPorNumero = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, PedidoEntity> pedidoTemporalPorTelefono = new ConcurrentHashMap<>();
 
     @PostMapping("/wati")
     public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
-        log.info("📥 Payload recibido: {}", payload.toPrettyString());
+        log.info("\uD83D\uDCE5 Payload recibido: {}", payload.toPrettyString());
 
         try {
             String tipo = payload.path("type").asText("");
+            String texto = payload.path("text").asText().toLowerCase();
             String telefono = payload.path("waId").asText("");
             String nombre = payload.path("senderName").asText("Cliente");
-            String texto = payload.path("text").asText().toLowerCase();
             String messageId = payload.path("whatsappMessageId").asText("");
 
-            if (telefono.isEmpty()) return ResponseEntity.ok().build();
-            if (messageId.isEmpty() || messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) return ResponseEntity.ok().build();
+            if (telefono.isEmpty() || messageId.isEmpty()) return ResponseEntity.ok().build();
+            if (messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) return ResponseEntity.ok().build();
             if (procesamientoEnCurso.putIfAbsent(telefono, true) != null) return ResponseEntity.ok().build();
 
             try {
-                // AYUDA
+                // 1. AYUDA: Si el usuario escribe 'ayuda'
                 if ("text".equalsIgnoreCase(tipo) && texto.contains("ayuda")) {
                     watiService.enviarTemplateAyuda(telefono, nombre);
                     return ResponseEntity.ok().build();
                 }
 
-                // 🟩 LOCAL: (tolerante a errores)
-                if ("text".equalsIgnoreCase(tipo) && texto.startsWith("local:")) {
-    String localIngresado = texto.substring(6).trim().toLowerCase();
+                // 2. LOCAL desde botón interactivo con "interactiveButtonReply"
+                if ("interactive".equalsIgnoreCase(tipo) && payload.has("interactiveButtonReply")) {
+                    String seleccion = payload.path("interactiveButtonReply").path("title").asText("").toLowerCase();
 
-    String localNormalizado = null;
-    if (localIngresado.contains("hyat")) {
-        localNormalizado = "HYATT";
-    } else if (localIngresado.contains("char")) {
-        localNormalizado = "CHARLES";
-    }
+                    String local = null;
+                    if (seleccion.contains("hyatt")) local = "HYATT";
+                    else if (seleccion.contains("charles")) local = "CHARLES";
 
-    if (localNormalizado == null) {
-        watiService.enviarMensajeTexto(telefono, "❌ Local inválido. Por favor escribe LOCAL: HYATT o LOCAL: CHARLES");
-        return ResponseEntity.ok().build();
-    }
+                    if (local != null) {
+                        PedidoEntity pedido = pedidoTemporalPorTelefono.get(telefono);
+                        if (pedido != null && pedido.getLocal() == null) {
+                            pedido.setLocal(local);
+                            log.info("✅ Local {} asignado al pedido temporal de {}", local, telefono);
+                        }
+                    }
+                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                    return ResponseEntity.ok().build();
+                }
 
-    PedidoEntity pedido = pedidoTemporalPorTelefono.remove(telefono);
+                // 3. INDICACION personalizada
+                if ("text".equalsIgnoreCase(tipo) && texto.startsWith("indicacion:")) {
+                    PedidoEntity pedido = pedidoTemporalPorTelefono.get(telefono);
+                    if (pedido != null && pedido.getIndicaciones() == null) {
+                        pedido.setIndicaciones(texto.substring(11).trim());
+                        log.info("✍️ Indicacion guardada para {}", telefono);
+                    }
+                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                    return ResponseEntity.ok().build();
+                }
 
-    if (pedido != null) {
-        pedido.setLocal(localNormalizado);
-        pedidoRepository.save(pedido);
+                // 4. MENSAJE RESUMEN: Detecta el mensaje con resumen desde el carrito
+                if ("text".equalsIgnoreCase(tipo) && texto.contains("desde el carrito") && texto.contains("total estimado")) {
+                    // Prevenir duplicados
+                    List<PedidoEntity> recientes = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
+                        telefono, "pendiente", LocalDateTime.now().minusMinutes(5));
+                    if (!recientes.isEmpty()) return ResponseEntity.ok().build();
 
-        PagoResponseDTO pago = transbankService.generarLinkDePago(pedido.getPedidoId(), pedido.getMonto().intValue());
-        pedido.setLinkPago(pago.getUrl());
-        pedidoRepository.save(pedido);
+                    // Extraer detalle y monto
+                    String detalle = extraerDetalleFlexible(texto);
+                    int monto = extraerMontoFlexible(texto);
+                    if (detalle == null || monto <= 0) return ResponseEntity.ok().build();
 
-        watiService.enviarMensajeTexto(telefono, "✅ Se ha registrado el local: " + localNormalizado);
-        watiService.enviarMensajePagoEstatico(telefono, pedido.getMonto(), pago.getUrl());
+                    // Verificar stock
+                    List<String> productos = extraerProductosDesdeDetalle(detalle);
+                    for (String producto : productos) {
+                        var stock = productoStockRepository.findByNombreIgnoreCase(producto);
+                        if (stock.isPresent() && !stock.get().getDisponible()) {
+                            watiService.enviarMensajeTexto(telefono, "❌ El producto '" + producto + "' no está disponible. Edita tu pedido.");
+                            return ResponseEntity.ok().build();
+                        }
+                    }
 
-    } else {
-        watiService.enviarMensajeTexto(telefono, "⚠️ No se encontró un pedido pendiente en memoria. Intenta de nuevo.");
-    }
+                    // Recuperar el local y la indicación desde el pedido temporal
+                    PedidoEntity temp = pedidoTemporalPorTelefono.remove(telefono);
+                    if (temp == null || temp.getLocal() == null) {
+                        watiService.enviarMensajeTexto(telefono, "⚠️ Debes seleccionar el local antes de confirmar el pedido.");
+                        return ResponseEntity.ok().build();
+                    }
 
-    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
-    return ResponseEntity.ok().build();
-}
+                    // Crear y guardar el pedido
+                    String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
+                    temp.setPedidoId(pedidoId);
+                    temp.setDetalle(detalle);
+                    temp.setMonto((double) monto);
+                    temp.setEstado("pendiente");
+                    temp.setFechaCreacion(LocalDateTime.now(ZoneId.of("America/Santiago")));
+                    pedidoRepository.save(temp);
 
+                    // Enviar link de pago
+                    PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
+                    temp.setLinkPago(pago.getUrl());
+                    pedidoRepository.save(temp);
 
-                // #trigger_view_cart
+                    watiService.enviarMensajePagoEstatico(telefono, (double) monto, pago.getUrl());
+                    log.info("✅ Pedido {} registrado y link enviado a {}", pedidoId, telefono);
+
+                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                    return ResponseEntity.ok().build();
+                }
+
+                // 5. TRIGGER inicial
                 if ("order".equalsIgnoreCase(tipo) && texto.contains("#trigger_view_cart")) {
-    log.info("🔍 Trigger de carrito detectado para {}", telefono);
-
-    String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
-    var headers = new HttpHeaders();
-    headers.set("Authorization", "Bearer " + System.getenv("WATI_API_KEY"));
-    var entity = new HttpEntity<>(headers);
-
-    JsonNode mensajes = null;
-    List<JsonNode> mensajesOrdenados = new ArrayList<>();
-    String mensajeResumen = null;
-    String indicacion = null;
-
-    long triggerTimestamp = payload.path("timestamp").asLong(0);
-
-    while (mensajeResumen == null) {
-        try {
-            var response = restTemplate.exchange(url, HttpMethod.GET, entity, JsonNode.class);
-            mensajes = response.getBody().path("messages").path("items");
-
-            if (mensajes == null || !mensajes.isArray()) {
-                TimeUnit.SECONDS.sleep(2);
-                continue;
-            }
-
-            mensajesOrdenados.clear();
-            mensajes.forEach(mensajesOrdenados::add);
-            mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
-
-            for (JsonNode msg : mensajesOrdenados) {
-                long msgTimestamp = obtenerTimestamp(msg);
-                if (msgTimestamp <= triggerTimestamp) continue;
-
-                String finalText = msg.path("finalText").asText("");
-                String textMsg = msg.path("text").asText("");
-                String contenido = !finalText.isBlank() ? finalText : textMsg;
-                String contenidoLower = contenido.toLowerCase();
-
-                if (contenidoLower.contains("desde el carrito") && contenidoLower.contains("total estimado")) {
-                    mensajeResumen = contenido;
+                    pedidoTemporalPorTelefono.put(telefono, new PedidoEntity());
+                    log.info("🚀 Trigger recibido. Se inició el pedido temporal para {}", telefono);
+                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                    return ResponseEntity.ok().build();
                 }
-
-                if (contenidoLower.startsWith("indicacion:") && indicacion == null) {
-                    indicacion = contenido.substring(contenido.indexOf(":") + 1).trim();
-                }
-            }
-
-            if (mensajeResumen == null) TimeUnit.SECONDS.sleep(2);
-
-        } catch (Exception e) {
-            log.error("❌ Error al obtener mensajes", e);
-            TimeUnit.SECONDS.sleep(2);
-        }
-    }
-
-    List<PedidoEntity> recientes = pedidoRepository.findByTelefonoAndEstadoAndFechaCreacionAfter(
-            telefono, "pendiente", LocalDateTime.now().minusMinutes(5));
-    if (!recientes.isEmpty()) return ResponseEntity.ok().build();
-
-    String detalle = extraerDetalleFlexible(mensajeResumen);
-    int monto = extraerMontoFlexible(mensajeResumen);
-
-    if (detalle == null || monto <= 0) return ResponseEntity.ok().build();
-
-    List<String> productos = extraerProductosDesdeDetalle(detalle);
-    for (String producto : productos) {
-        var stock = productoStockRepository.findByNombreIgnoreCase(producto);
-        if (stock.isPresent() && !stock.get().getDisponible()) {
-            String advertencia = "❌ El producto '" + producto + "' no está disponible en este momento. Por favor edita tu pedido.";
-            System.out.println("⛔ Producto no disponible detectado: " + producto);
-            watiService.enviarMensajeTexto(telefono, advertencia);
-            return ResponseEntity.ok().build();
-        }
-    }
-
-    String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
-    PedidoEntity pedido = new PedidoEntity();
-    pedido.setPedidoId(pedidoId);
-    pedido.setTelefono(telefono);
-    pedido.setDetalle(detalle);
-    pedido.setIndicaciones(indicacion);
-    pedido.setEstado("pendiente");
-    pedido.setMonto((double) monto);
-    pedido.setFechaCreacion(LocalDateTime.now(ZoneId.of("America/Santiago")));
-
-    pedidoTemporalPorTelefono.put(telefono, pedido);
-
-    watiService.enviarMensajeTexto(telefono, "¿En qué local retirarás tu pedido? Responde con LOCAL: HYATT o LOCAL: CHARLES.");
-
-    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
-    return ResponseEntity.ok().build();
-}
-
 
             } finally {
                 procesamientoEnCurso.remove(telefono);
@@ -218,14 +167,12 @@ public class WebhookController {
         return ResponseEntity.ok().build();
     }
 
+    // 🔧 Utilidades para extraer datos del texto
     private String extraerDetalleFlexible(String texto) {
         try {
-            String[] lineas = texto.split("\n");
             StringBuilder sb = new StringBuilder();
-            for (String linea : lineas) {
-                if (linea.contains("×")) {
-                    sb.append(linea.trim()).append("\n");
-                }
+            for (String linea : texto.split("\n")) {
+                if (linea.contains("×")) sb.append(linea.trim()).append("\n");
             }
             return sb.toString().trim();
         } catch (Exception e) {
@@ -239,8 +186,7 @@ public class WebhookController {
             int fin = texto.indexOf("}", inicio);
             if (inicio != -1 && fin != -1) {
                 String jsonStr = texto.substring(inicio, fin + 1);
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode node = mapper.readTree(jsonStr);
+                JsonNode node = new ObjectMapper().readTree(jsonStr);
                 return (int) node.path("Total").asDouble(0);
             }
         } catch (Exception e) {
@@ -249,31 +195,14 @@ public class WebhookController {
         return -1;
     }
 
-    private long obtenerTimestamp(JsonNode msg) {
-        if (msg.has("timestamp")) return msg.path("timestamp").asLong(0);
-        if (msg.has("created")) {
-            try {
-                return java.time.Instant.parse(msg.path("created").asText("")).getEpochSecond();
-            } catch (Exception e) {
-                return 0;
-            }
-        }
-        return 0;
-    }
     private List<String> extraerProductosDesdeDetalle(String detalle) {
-    List<String> productos = new ArrayList<>();
-    String[] lineas = detalle.split("\n");
-
-    for (String linea : lineas) {
-        if (linea.contains("×")) {
-            String[] partes = linea.split("×");
-            if (partes.length == 2) {
-                productos.add(partes[1].trim().toLowerCase());
+        List<String> productos = new ArrayList<>();
+        for (String linea : detalle.split("\n")) {
+            if (linea.contains("×")) {
+                String[] partes = linea.split("×");
+                if (partes.length == 2) productos.add(partes[1].trim().toLowerCase());
             }
         }
+        return productos;
     }
-
-    return productos;
-}
-}
-
+} 
