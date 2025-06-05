@@ -67,6 +67,16 @@ public class WebhookController {
                     watiService.enviarTemplateAyuda(telefono, nombre);
                     return ResponseEntity.ok().build();
                 }
+                // 3. INDICACION personalizada
+                if ("text".equalsIgnoreCase(tipo) && texto.startsWith("indicacion:")) {
+                    PedidoEntity pedido = pedidoTemporalPorTelefono.get(telefono);
+                    if (pedido != null && pedido.getIndicaciones() == null) {
+                        pedido.setIndicaciones(texto.substring(11).trim());
+                        log.info("✍️ Indicacion guardada para {}", telefono);
+                    }
+                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                    return ResponseEntity.ok().build();
+                }
 
                 // 2. LOCAL desde botón interactivo con "interactiveButtonReply"
                 if ("interactive".equalsIgnoreCase(tipo) && payload.has("interactiveButtonReply")) {
@@ -82,17 +92,6 @@ public class WebhookController {
                             pedido.setLocal(local);
                             log.info("✅ Local {} asignado al pedido temporal de {}", local, telefono);
                         }
-                    }
-                    ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
-                    return ResponseEntity.ok().build();
-                }
-
-                // 3. INDICACION personalizada
-                if ("text".equalsIgnoreCase(tipo) && texto.startsWith("indicacion:")) {
-                    PedidoEntity pedido = pedidoTemporalPorTelefono.get(telefono);
-                    if (pedido != null && pedido.getIndicaciones() == null) {
-                        pedido.setIndicaciones(texto.substring(11).trim());
-                        log.info("✍️ Indicacion guardada para {}", telefono);
                     }
                     ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
                     return ResponseEntity.ok().build();
