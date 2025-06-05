@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
+import com.whatsappbot.whatsappservice.repository.ProductoStockRepository;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
@@ -38,6 +39,7 @@ public class WebhookController {
     private final WatiService watiService;
     private final TransbankService transbankService;
     private final PedidoRepository pedidoRepository;
+    private final ProductoStockRepository productoStockRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
     private final ConcurrentHashMap<String, PedidoEntity> pedidoTemporalPorTelefono = new ConcurrentHashMap<>();
@@ -56,17 +58,89 @@ public class WebhookController {
         if (telefono.isBlank() || messageId.isBlank()) return ResponseEntity.ok().build();
         if (messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) return ResponseEntity.ok().build();
 
-        // ✅ Paso 1: Trigger desde el carrito
+        // ✅ Paso 1: Trigger desde el carrito para validar stock
         if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
-            log.info("🚀 Trigger recibido. Se inició el pedido temporal para {}", telefono);
+            log.info("🟢 Trigger recibido para validar stock de {}", telefono);
+
+            String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
+            var headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + watiApiKey);
+            var entity = new HttpEntity<>(headers);
+
+            JsonNode mensajes;
+            List<JsonNode> mensajesOrdenados = new ArrayList<>();
+            String mensajeResumen = null;
+
+            int reintentos = 0;
+            long triggerTimestamp = payload.path("timestamp").asLong(0);
+
+            while (mensajeResumen == null && reintentos < 10) {
+                try {
+                    var response = restTemplate.exchange(url, HttpMethod.GET, entity, JsonNode.class);
+                    mensajes = response.getBody().path("messages").path("items");
+
+                    if (mensajes == null || !mensajes.isArray()) {
+                        TimeUnit.SECONDS.sleep(2);
+                        reintentos++;
+                        continue;
+                    }
+
+                    mensajesOrdenados.clear();
+                    mensajes.forEach(mensajesOrdenados::add);
+                    mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
+
+                    for (JsonNode msg : mensajesOrdenados) {
+                        long msgTimestamp = obtenerTimestamp(msg);
+                        if (msgTimestamp <= triggerTimestamp) continue;
+
+                        String finalText = msg.path("finalText").asText("");
+                        String textMsg = msg.path("text").asText("");
+                        String contenido = !finalText.isBlank() ? finalText : textMsg;
+                        String contenidoLower = contenido.toLowerCase();
+
+                        if (contenidoLower.contains("desde el carrito") && contenidoLower.contains("total estimado")) {
+                            mensajeResumen = contenido;
+                            break;
+                        }
+                    }
+
+                    if (mensajeResumen == null) {
+                        TimeUnit.SECONDS.sleep(2);
+                        reintentos++;
+                    }
+                } catch (Exception e) {
+                    log.error("❌ Error obteniendo mensaje resumen", e);
+                    reintentos++;
+                }
+            }
+
+            if (mensajeResumen == null) {
+                watiService.enviarMensajeTexto(telefono, "❌ No se encontró el resumen del carrito. Intenta de nuevo.");
+                return ResponseEntity.ok().build();
+            }
+
+            // Validar productos
+            List<String> productos = extraerProductosDesdeDetalle(extraerDetalleFlexible(mensajeResumen));
+            for (String producto : productos) {
+                var stock = productoStockRepository.findByNombreIgnoreCase(producto);
+                if (stock.isPresent() && !stock.get().getDisponible()) {
+                    String advertencia = "❌ El producto '" + producto + "' no está disponible. Por favor edita tu pedido.";
+                    watiService.enviarMensajeTexto(telefono, advertencia);
+                    return ResponseEntity.ok().build();
+                }
+            }
+
+            // Si todo bien, continuar el flujo
             PedidoEntity pedido = new PedidoEntity();
-            pedido.setPedidoId(generarPedidoIdSeguro()); // ✅ Usamos método seguro
+            pedido.setPedidoId("pedido-" + UUID.randomUUID());
             pedido.setTelefono(telefono);
             pedidoTemporalPorTelefono.put(telefono, pedido);
+
+            watiService.enviarMensajeTexto(telefono, "✅ Stock verificado");
             return ResponseEntity.ok().build();
         }
 
-        // ✅ Paso 2: Botón "No" => WATI envía opciones de local => usuario elige local
+        // ✅ Paso 2: Botón "No" => usuario elige local
         if ("interactive".equalsIgnoreCase(tipo)) {
             JsonNode btn = payload.path("interactiveButtonReply");
             String title = btn.path("title").asText("").toLowerCase();
@@ -83,7 +157,7 @@ public class WebhookController {
 
                 pedido.setLocal(localNormalizado);
 
-                // Esperar mensaje resumen
+                // Esperar mensaje resumen después del local
                 String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
                 var headers = new HttpHeaders();
                 headers.set("Authorization", "Bearer " + watiApiKey);
@@ -130,17 +204,18 @@ public class WebhookController {
                         }
 
                         if (mensajeResumen == null) {
-                            TimeUnit.SECONDS.sleep(2);
-                            reintentos++;
-                        }
-                    } catch (Exception e) {
-                        log.error("❌ Error esperando resumen después del local", e);
-                        try {
-                            TimeUnit.SECONDS.sleep(2);
-                            reintentos++;
-                        } catch (InterruptedException ignored) {
-                        }
-                    }
+                           try {
+                    TimeUnit.SECONDS.sleep(2);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("⏸️ Sleep interrumpido", e);
+                }
+                reintentos++;
+            }
+        } catch (Exception e) {
+            log.error("❌ Error obteniendo mensaje resumen", e);
+            reintentos++;
+        }
                 }
 
                 String detalle = extraerDetalleFlexible(mensajeResumen);
@@ -156,7 +231,7 @@ public class WebhookController {
                 pedido.setEstado("pendiente");
                 pedidoRepository.save(pedido);
 
-                PagoResponseDTO pago = transbankService.generarLinkDePago(pedido.getPedidoId(), monto); // ✅ seguro
+                PagoResponseDTO pago = transbankService.generarLinkDePago(pedido.getPedidoId(), monto);
                 pedido.setLinkPago(pago.getUrl());
                 pedidoRepository.save(pedido);
 
@@ -175,12 +250,7 @@ public class WebhookController {
         return ResponseEntity.ok().build();
     }
 
-    // ✅ Método seguro para crear ID único y corto
-    private String generarPedidoIdSeguro() {
-        return "pedido-" + UUID.randomUUID().toString().replace("-", "").substring(0, 18);
-    }
-
-    // Métodos utilitarios (sin cambios)
+    // Métodos auxiliares
     private String extraerDetalleFlexible(String texto) {
         try {
             String[] lineas = texto.split("\n");
@@ -194,6 +264,20 @@ public class WebhookController {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private List<String> extraerProductosDesdeDetalle(String detalle) {
+        List<String> productos = new ArrayList<>();
+        if (detalle == null) return productos;
+        for (String linea : detalle.split("\n")) {
+            if (linea.contains("×")) {
+                String[] partes = linea.split("×");
+                if (partes.length == 2) {
+                    productos.add(partes[1].trim().toLowerCase());
+                }
+            }
+        }
+        return productos;
     }
 
     private int extraerMontoFlexible(String texto) {
@@ -216,7 +300,8 @@ public class WebhookController {
         if (msg.has("timestamp")) return msg.path("timestamp").asLong(0);
         if (msg.has("created")) {
             try {
-                return java.time.Instant.parse(msg.path("created").asText("")).getEpochSecond();
+                return java.time.Instant.parse(msg.path("created").asText(""))
+                        .getEpochSecond();
             } catch (Exception e) {
                 return 0;
             }
