@@ -3,6 +3,7 @@ package com.whatsappbot.whatsappservice.controller;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +51,7 @@ public class WebhookController {
 
     @PostMapping("/wati")
     public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
+
         String telefono = payload.path("waId").asText();
         String texto = payload.path("text").asText("");
         String tipo = payload.path("type").asText();
@@ -57,6 +59,21 @@ public class WebhookController {
 
         if (telefono.isBlank() || messageId.isBlank()) return ResponseEntity.ok().build();
         if (messageId.equals(ultimoMensajeProcesadoPorNumero.get(telefono))) return ResponseEntity.ok().build();
+
+        Optional<PedidoEntity> pedidoExistente = pedidoRepository.findTopByTelefonoOrderByFechaCreacionDesc(telefono);
+        boolean flujoRestringido = pedidoExistente.isPresent() && "pagado".equalsIgnoreCase(pedidoExistente.get().getEstado());
+
+        if (flujoRestringido && !texto.equalsIgnoreCase("nuevo")) {
+            watiService.enviarMensajeTexto(telefono, "🟡 Ya has realizado un pedido recientemente. Si deseas hacer otro, escribe *nuevo* para comenzar.");
+            return ResponseEntity.ok().build();
+        }
+
+        if (texto.equalsIgnoreCase("nuevo")) {
+            pedidoTemporalPorTelefono.remove(telefono);
+            ultimoMensajeProcesadoPorNumero.remove(telefono);
+            watiService.enviarMensajeTexto(telefono, "🔄 ¡Comencemos un nuevo pedido! Por favor presiona *Ver Carrito* nuevamente.");
+            return ResponseEntity.ok().build();
+        }
 
         if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
             log.info("🟢 Trigger recibido para validar stock de {}", telefono);
@@ -138,20 +155,17 @@ public class WebhookController {
             pedidoTemporalPorTelefono.put(telefono, pedido);
 
             watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
-                watiService.enviarMensajeBotones(
-                    telefono,
-                    "¿Deseas agregar una indicación especial al pedido?",
-                    "Puedes personalizarlo",
-                    "",
-                    List.of("Sí", "No")
-                );
-            
+            watiService.enviarMensajeBotones(
+                telefono,
+                "¿Deseas agregar una indicación especial al pedido?",
+                "Puedes personalizarlo",
+                "",
+                List.of("Sí", "No")
+            );
 
             return ResponseEntity.ok().build();
-        
-    }
+        }
 
-        // ✅ Paso 2: Botón "No" => usuario elige local
         if ("interactive".equalsIgnoreCase(tipo)) {
             JsonNode btn = payload.path("interactiveButtonReply");
             String title = btn.path("title").asText("").toLowerCase();
@@ -168,7 +182,6 @@ public class WebhookController {
 
                 pedido.setLocal(localNormalizado);
 
-                // Esperar mensaje resumen después del local
                 String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
                 var headers = new HttpHeaders();
                 headers.set("Authorization", "Bearer " + watiApiKey);
@@ -215,18 +228,14 @@ public class WebhookController {
                         }
 
                         if (mensajeResumen == null) {
-                           try {
-                    TimeUnit.SECONDS.sleep(2);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.warn("⏸️ Sleep interrumpido", e);
-                }
-                reintentos++;
-            }
-        } catch (Exception e) {
-            log.error("❌ Error obteniendo mensaje resumen", e);
-            reintentos++;
-        }
+                            TimeUnit.SECONDS.sleep(2);
+                            reintentos++;
+                        }
+
+                    } catch (Exception e) {
+                        log.error("❌ Error obteniendo mensaje resumen", e);
+                        reintentos++;
+                    }
                 }
 
                 String detalle = extraerDetalleFlexible(mensajeResumen);
@@ -261,7 +270,6 @@ public class WebhookController {
         return ResponseEntity.ok().build();
     }
 
-    // Métodos auxiliares
     private String extraerDetalleFlexible(String texto) {
         try {
             String[] lineas = texto.split("\n");
@@ -311,8 +319,7 @@ public class WebhookController {
         if (msg.has("timestamp")) return msg.path("timestamp").asLong(0);
         if (msg.has("created")) {
             try {
-                return java.time.Instant.parse(msg.path("created").asText(""))
-                        .getEpochSecond();
+                return java.time.Instant.parse(msg.path("created").asText("")).getEpochSecond();
             } catch (Exception e) {
                 return 0;
             }
