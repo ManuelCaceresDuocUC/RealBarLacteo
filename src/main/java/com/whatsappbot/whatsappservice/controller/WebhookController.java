@@ -132,7 +132,8 @@ public class WebhookController {
             }
 
             PedidoEntity pedido = new PedidoEntity();
-            pedido.setPedidoId("pedido-" + UUID.randomUUID());
+            String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 18);
+            pedido.setPedidoId(pedidoId);
             pedido.setTelefono(telefono);
             pedidoTemporalPorTelefono.put(telefono, pedido);
 
