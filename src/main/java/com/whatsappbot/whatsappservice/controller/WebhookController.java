@@ -99,6 +99,14 @@ public class WebhookController {
 
                 if (contenidoLower.contains("items del carrito:")) {
                     mensajeCarrito = contenido;
+                    watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
+                    watiService.enviarMensajeBotones(
+                        telefono,
+                        "¿Deseas agregar una indicación especial al pedido?",
+                        "Puedes personalizarlo",
+                        "",
+                        List.of("Sí", "No")
+                    );
                     break;
                 }
             }
@@ -140,14 +148,7 @@ public class WebhookController {
     pedido.setDetalle(detalle); // ya que lo tenemos ahora
     pedidoTemporalPorTelefono.put(telefono, pedido);
 
-    watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
-    watiService.enviarMensajeBotones(
-        telefono,
-        "¿Deseas agregar una indicación especial al pedido?",
-        "Puedes personalizarlo",
-        "",
-        List.of("Sí", "No")
-    );
+    
 
     return ResponseEntity.ok().build();
 }
