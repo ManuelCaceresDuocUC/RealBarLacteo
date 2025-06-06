@@ -117,22 +117,13 @@ public class WebhookController {
     }
 
     if (mensajeCarrito == null) {
-        watiService.enviarMensajeTexto(telefono, "❌ No se encontró el detalle del carrito. Intenta de nuevo.");
+        watiService.enviarMensajeTexto(telefono, "❌ No se encontró el mensaje con los items del carrito. Intenta de nuevo.");
         return ResponseEntity.ok().build();
     }
 
-    // Extraer productos del mensaje usando regex
-    List<String> productos = new ArrayList<>();
-    for (String linea : mensajeCarrito.split("\n")) {
-        if (linea.matches(".*\\d+\\s×\\s.+")) {
-            String[] partes = linea.split("×");
-            if (partes.length == 2) {
-                productos.add(partes[1].trim().toLowerCase());
-            }
-        }
-    }
+    String detalle = extraerDetalleFlexible(mensajeCarrito);
+    List<String> productos = extraerProductosDesdeDetalle(detalle);
 
-    // Verificar stock
     for (String producto : productos) {
         var stock = productoStockRepository.findByNombreIgnoreCase(producto);
         if (stock.isPresent() && !stock.get().getDisponible()) {
@@ -146,6 +137,7 @@ public class WebhookController {
     String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 18);
     pedido.setPedidoId(pedidoId);
     pedido.setTelefono(telefono);
+    pedido.setDetalle(detalle); // ya que lo tenemos ahora
     pedidoTemporalPorTelefono.put(telefono, pedido);
 
     watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
@@ -159,6 +151,7 @@ public class WebhookController {
 
     return ResponseEntity.ok().build();
 }
+
 
 
         // ✅ Paso 2: Botón "No" => usuario elige local
