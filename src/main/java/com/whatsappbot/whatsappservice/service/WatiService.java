@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType; // ✅ Este es el de Spring
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -17,7 +18,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import lombok.RequiredArgsConstructor;
-import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -38,14 +38,11 @@ public class WatiService {
 
     private final OkHttpClient client = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
-    private final RestTemplate restTemplate; // ✅ Aquí está inyectado correctamente
+    private final RestTemplate restTemplate;
 
-    // ✅ 1. Enviar mensaje de texto simple (sesión activa)
     public void enviarMensajeTexto(String telefono, String mensaje) {
         try {
-            telefono = telefono.replace("+", ""); // Limpieza del número
-
-            // 🟢 Construcción de URL para enviar sesión
+            telefono = telefono.replace("+", "");
             String url = watiApiUrl + "/" + tenantId + "/api/v1/sendSessionMessage/" + telefono
                     + "?messageText=" + java.net.URLEncoder.encode(mensaje, java.nio.charset.StandardCharsets.UTF_8);
 
@@ -53,7 +50,7 @@ public class WatiService {
                     .url(url)
                     .addHeader("Authorization", "Bearer " + apiKey)
                     .addHeader("Content-Type", "application/json")
-                    .post(RequestBody.create("", null)) // WATI requiere un body vacío
+                    .post(RequestBody.create("", null))
                     .build();
 
             try (Response response = client.newCall(request).execute()) {
@@ -72,10 +69,8 @@ public class WatiService {
         }
     }
 
-    // ✅ 2. Enviar plantilla de confirmación con link de comanda
     public void enviarMensajeConTemplate(String telefono, String pedidoId, String linkComanda) throws IOException {
         telefono = telefono.replace("+", "");
-
         String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
         Map<String, Object> data = new HashMap<>();
@@ -90,10 +85,8 @@ public class WatiService {
         enviarPostWati(url, data, "plantilla de confirmación con link");
     }
 
-    // ✅ 3. Enviar plantilla de ayuda automática con nombre del cliente
     public void enviarTemplateAyuda(String telefono, String nombre) throws IOException {
         telefono = telefono.replace("+", "");
-
         String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
         Map<String, Object> data = new HashMap<>();
@@ -107,10 +100,8 @@ public class WatiService {
         enviarPostWati(url, data, "plantilla de ayuda");
     }
 
-    // ✅ 4. Enviar plantilla de pago estático con monto y link
     public void enviarMensajePagoEstatico(String telefono, Double total, String linkPago) throws IOException {
         telefono = telefono.replace("+", "");
-
         String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
         Map<String, Object> data = new HashMap<>();
@@ -126,10 +117,8 @@ public class WatiService {
         enviarPostWati(url, data, "plantilla de pago estático");
     }
 
-    // ✅ 5. Enviar plantilla de confirmación simple con nombre
     public void enviarTemplateConfirmacionSimple(String telefono, String nombre) throws IOException {
         telefono = telefono.replace("+", "");
-
         String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
         Map<String, Object> data = new HashMap<>();
@@ -143,14 +132,13 @@ public class WatiService {
         enviarPostWati(url, data, "confirmación simple");
     }
 
-    // 🔁 Método reutilizable para enviar POST a WATI con plantillas
     private void enviarPostWati(String url, Map<String, Object> data, String descripcion) throws IOException {
         String json = mapper.writeValueAsString(data);
 
         System.out.println("📤 Enviando POST a WATI: " + url);
         System.out.println("📦 Payload JSON: " + json);
 
-        RequestBody body = RequestBody.create(json, MediaType.parse("application/json"));
+        RequestBody body = RequestBody.create(json, okhttp3.MediaType.parse("application/json"));
         Request request = new Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer " + apiKey)
@@ -171,27 +159,38 @@ public class WatiService {
             }
         }
     }
-    public void enviarMensajeBotones(String telefono, String cuerpo, String descripcion, List<String> botones) throws IOException {
-    String url = "https://live-mt-server.wati.io/442590/api/v1/sendInteractiveButtons";
 
-    ObjectNode payload = new ObjectMapper().createObjectNode();
-    payload.put("phone_number", telefono);
-    payload.put("message", cuerpo);
-    payload.put("footer", descripcion);
+    public void enviarMensajeBotones(String telefono, String headerText, String bodyText, String footerText, List<String> botones) {
+        try {
+            String url = watiApiUrl + "/" + tenantId + "/api/v1/sendInteractiveButtonsMessage?whatsappNumber=" + telefono;
 
-    ArrayNode buttonArray = payload.putArray("buttons");
-    for (String texto : botones) {
-        ObjectNode btn = buttonArray.addObject();
-        btn.put("type", "reply");
-        btn.put("title", texto);
+            ObjectNode payload = new ObjectNode(new com.fasterxml.jackson.databind.node.JsonNodeFactory(false));
+            ObjectNode header = payload.putObject("header");
+            header.put("type", "Text");
+            header.put("text", headerText);
+
+            payload.put("body", bodyText);
+            payload.put("footer", footerText);
+
+            ArrayNode buttonsArray = payload.putArray("buttons");
+            for (String b : botones) {
+                ObjectNode button = buttonsArray.addObject();
+                button.put("type", "reply");
+                button.put("text", b);
+            }
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON); // <-- Este es de Spring
+            headers.set("Authorization", "Bearer " + apiKey);
+
+            HttpEntity<String> entity = new HttpEntity<>(payload.toString(), headers);
+            restTemplate.postForEntity(url, entity, String.class);
+
+            System.out.println("✅ Botones enviados correctamente por WATI");
+
+        } catch (Exception e) {
+            System.err.println("❌ Error enviando botones WATI:");
+            e.printStackTrace();
+        }
     }
-
-    HttpHeaders headers = new HttpHeaders();
-    headers.set("Authorization", "Bearer " + apiKey);
-    headers.set("Content-Type", "application/json");
-
-    HttpEntity<String> entity = new HttpEntity<>(payload.toString(), headers);
-    restTemplate.postForEntity(url, entity, String.class);
-}
-
 }
