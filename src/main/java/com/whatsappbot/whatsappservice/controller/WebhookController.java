@@ -60,10 +60,7 @@ public class WebhookController {
         // Paso 1: Mensaje de carrito recibido
         if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
             Optional<PedidoEntity> ultimoPedido = pedidoRepository.findTopByTelefonoOrderByFechaCreacionDesc(telefono);
-if (ultimoPedido.isPresent() && "pagado".equalsIgnoreCase(ultimoPedido.get().getEstado())) {
-    log.info("ℹ️ El último pedido de {} ya fue pagado. Ignorando trigger.", telefono);
-    return ResponseEntity.ok().build();
-}
+
             log.info("🟢 Trigger recibido para validar stock de {}", telefono);
 
             String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
