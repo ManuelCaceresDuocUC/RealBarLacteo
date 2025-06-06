@@ -41,6 +41,7 @@ public class WebhookController {
     private final PedidoRepository pedidoRepository;
     private final ProductoStockRepository productoStockRepository;
     private final RestTemplate restTemplate = new RestTemplate();
+    private final ConcurrentHashMap<String, Boolean> indicacionPreguntadaPorTelefono = new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<String, PedidoEntity> pedidoTemporalPorTelefono = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> ultimoMensajeProcesadoPorNumero = new ConcurrentHashMap<>();
@@ -99,14 +100,22 @@ public class WebhookController {
 
                 if (contenidoLower.contains("items del carrito:")) {
                     mensajeCarrito = contenido;
-                    watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
-                    watiService.enviarMensajeBotones(
-                        telefono,
-                        "¿Deseas agregar una indicación especial al pedido?",
-                        "Puedes personalizarlo",
-                        "",
-                        List.of("Sí", "No")
-                    );
+
+                    // Solo enviar si aún no se preguntó
+                    if (!indicacionPreguntadaPorTelefono.getOrDefault(telefono, false)) {
+                        watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
+
+                        watiService.enviarMensajeBotones(
+                            telefono,
+                            "¿Deseas agregar una indicación especial al pedido?",
+                            "Puedes personalizarlo",
+                            "",
+                            List.of("Sí", "No")
+                        );
+
+                        indicacionPreguntadaPorTelefono.put(telefono, true);
+                    }
+
                     break;
                 }
             }
@@ -257,6 +266,8 @@ public class WebhookController {
                 }
 
                 pedidoTemporalPorTelefono.remove(telefono);
+                indicacionPreguntadaPorTelefono.remove(telefono); // <- Limpieza aquí
+
                 ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
                 return ResponseEntity.ok().build();
             }
