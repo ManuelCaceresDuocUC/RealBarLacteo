@@ -17,6 +17,7 @@ import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.service.ComandaService;
+import com.whatsappbot.whatsappservice.service.PedidoContextService;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
 
@@ -34,6 +35,7 @@ public class PedidoControlador {
     private final TransbankService transbankService;
     private final WatiService watiService;
     private final ComandaService comandaService;
+    private final PedidoContextService pedidoContext;
 
     @PostMapping
 public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
@@ -105,7 +107,13 @@ public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String tok
             }
 
             log.info("✅ Pago confirmado para pedido {}", buyOrder);
+
+            // ✅ Elimina los datos temporales en memoria para reiniciar flujo
+            pedidoContext.pedidoTemporalPorTelefono.remove(pedido.getTelefono());
+pedidoContext.indicacionPreguntadaPorTelefono.remove(pedido.getTelefono());
+pedidoContext.ultimoMensajeProcesadoPorNumero.remove(pedido.getTelefono());
             return ResponseEntity.ok("✅ Pago confirmado, comanda generada y mensaje enviado.");
+
         } else {
             return ResponseEntity.status(404).body("❌ Pedido no encontrado");
         }
