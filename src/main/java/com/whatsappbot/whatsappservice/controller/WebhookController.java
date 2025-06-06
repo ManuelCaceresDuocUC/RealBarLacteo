@@ -1,5 +1,6 @@
 package com.whatsappbot.whatsappservice.controller;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -141,6 +142,17 @@ public class WebhookController {
         pedidoTemporalPorTelefono.put(telefono, pedido);
 
         watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR"); // ← Activa siguiente paso del flujo en WATI
+        try {
+            watiService.enviarMensajeBotones(
+                telefono,
+                "¿Deseas agregar una indicación especial al pedido?",
+                "Puedes personalizarlo",
+                List.of("Sí", "No")
+            );
+        } catch (IOException e) {
+            log.error("❌ Error al enviar los botones de indicación", e);
+        }
+
         return ResponseEntity.ok().build();
     }
 

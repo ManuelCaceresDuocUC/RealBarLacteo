@@ -7,10 +7,16 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import lombok.RequiredArgsConstructor;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -18,9 +24,9 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 @Service
+@RequiredArgsConstructor
 public class WatiService {
 
-    // 🔐 Variables de configuración cargadas desde application.properties o variables de entorno
     @Value("${wati.api.url}")
     private String watiApiUrl;
 
@@ -32,6 +38,7 @@ public class WatiService {
 
     private final OkHttpClient client = new OkHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
+    private final RestTemplate restTemplate; // ✅ Aquí está inyectado correctamente
 
     // ✅ 1. Enviar mensaje de texto simple (sesión activa)
     public void enviarMensajeTexto(String telefono, String mensaje) {
@@ -164,4 +171,27 @@ public class WatiService {
             }
         }
     }
+    public void enviarMensajeBotones(String telefono, String cuerpo, String descripcion, List<String> botones) throws IOException {
+    String url = "https://live-mt-server.wati.io/442590/api/v1/sendInteractiveButtons";
+
+    ObjectNode payload = new ObjectMapper().createObjectNode();
+    payload.put("phone_number", telefono);
+    payload.put("message", cuerpo);
+    payload.put("footer", descripcion);
+
+    ArrayNode buttonArray = payload.putArray("buttons");
+    for (String texto : botones) {
+        ObjectNode btn = buttonArray.addObject();
+        btn.put("type", "reply");
+        btn.put("title", texto);
+    }
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("Authorization", "Bearer " + apiKey);
+    headers.set("Content-Type", "application/json");
+
+    HttpEntity<String> entity = new HttpEntity<>(payload.toString(), headers);
+    restTemplate.postForEntity(url, entity, String.class);
+}
+
 }
