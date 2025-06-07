@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.service.ComandaService;
+import com.whatsappbot.whatsappservice.service.PedidoContextService;
 import com.whatsappbot.whatsappservice.service.PedidoService;
 import com.whatsappbot.whatsappservice.service.WhatsAppService;
 
@@ -26,6 +27,9 @@ public class TransbankWebhookController {
 
     @Autowired
     private WhatsAppService whatsAppService;
+
+    @Autowired
+    private PedidoContextService pedidoContext; // ✅ Agregado para limpiar el contexto
 
     @PostMapping("/webhook")
     public ResponseEntity<String> recibirWebhookDeTransbank(@RequestBody Map<String, Object> payload) {
@@ -53,7 +57,13 @@ public class TransbankWebhookController {
             whatsAppService.enviarMensaje(pedido.getTelefono(),
                 "🎉 ¡Gracias por tu pago! Tu pedido " + pedidoId + " está en preparación.");
 
-            return ResponseEntity.ok("✅ Pago confirmado y comanda generada");
+            // 🧹 Limpiar el contexto del cliente
+            String telefono = pedido.getTelefono();
+            pedidoContext.pedidoTemporalPorTelefono.remove(telefono);
+            pedidoContext.indicacionPreguntadaPorTelefono.remove(telefono);
+            pedidoContext.ultimoMensajeProcesadoPorNumero.remove(telefono);
+
+            return ResponseEntity.ok("✅ Pago confirmado, comanda generada y contexto limpiado");
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.badRequest().body("❌ Error al procesar notificación de Transbank");
