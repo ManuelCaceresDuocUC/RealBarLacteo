@@ -11,4 +11,6 @@ public class PedidoContextService {
     public final ConcurrentHashMap<String, PedidoEntity> pedidoTemporalPorTelefono = new ConcurrentHashMap<>();
     public final ConcurrentHashMap<String, Boolean> indicacionPreguntadaPorTelefono = new ConcurrentHashMap<>();
     public final ConcurrentHashMap<String, String> ultimoMensajeProcesadoPorNumero = new ConcurrentHashMap<>();
+    public ConcurrentHashMap<String, Boolean> stockVerificadoPorTelefono = new ConcurrentHashMap<>();
+
 }
