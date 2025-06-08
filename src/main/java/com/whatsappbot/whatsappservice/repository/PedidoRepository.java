@@ -27,6 +27,7 @@ public interface PedidoRepository extends JpaRepository<PedidoEntity, Long> {
     Optional<PedidoEntity> findUltimoPedidoPagado();
 Optional<PedidoEntity> findTopByTelefonoOrderByFechaCreacionDesc(String telefono);
 List<PedidoEntity> findByEstadoAndFechaCreacionBefore(String estado, LocalDateTime fechaCreacion);
+PedidoEntity findByTokenWs(String tokenWs);
 
 
 }

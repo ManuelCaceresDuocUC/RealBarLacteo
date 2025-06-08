@@ -29,35 +29,35 @@ public class TransbankWebhookController {
     private WhatsAppService whatsAppService;
 
     @Autowired
-    private PedidoContextService pedidoContext; // ✅ Agregado para limpiar el contexto
+    private PedidoContextService pedidoContext;
 
     @PostMapping("/webhook")
     public ResponseEntity<String> recibirWebhookDeTransbank(@RequestBody Map<String, Object> payload) {
         try {
             String status = (String) payload.get("status");
-            String pedidoId = (String) payload.get("buy_order"); // viene como PED-XXXXX
+            String token = (String) payload.get("token");
 
             if (!"AUTHORIZED".equalsIgnoreCase(status)) {
                 return ResponseEntity.badRequest().body("❌ Pago no autorizado");
             }
 
-            PedidoEntity pedido = pedidoService.buscarPedidoPorId(pedidoId);
+            PedidoEntity pedido = pedidoService.buscarPorToken(token);
             if (pedido == null) {
-                return ResponseEntity.badRequest().body("❌ Pedido no encontrado: " + pedidoId);
+                return ResponseEntity.badRequest().body("❌ Pedido no encontrado con token: " + token);
             }
 
-            // Actualizar estado
+            // ✅ Actualizar estado
             pedido.setEstado("pagado");
             pedidoService.guardarPedido(pedido);
 
-            // Generar comanda
+            // 📄 Generar comanda
             comandaService.generarPDF(pedido);
 
-            // (Opcional) Notificar por WhatsApp
+            // 📲 Notificar por WhatsApp
             whatsAppService.enviarMensaje(pedido.getTelefono(),
-                "🎉 ¡Gracias por tu pago! Tu pedido " + pedidoId + " está en preparación.");
+                "🎉 ¡Gracias por tu pago! Tu pedido " + pedido.getPedidoId() + " está en preparación.");
 
-            // 🧹 Limpiar el contexto del cliente
+            // 🧹 Limpiar contexto del cliente
             String telefono = pedido.getTelefono();
             pedidoContext.pedidoTemporalPorTelefono.remove(telefono);
             pedidoContext.indicacionPreguntadaPorTelefono.remove(telefono);

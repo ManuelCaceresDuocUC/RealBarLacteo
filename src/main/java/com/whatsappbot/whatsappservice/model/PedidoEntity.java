@@ -42,7 +42,8 @@ public class PedidoEntity {
     // 🟩 Nuevo campo para el local
     @Column(name = "local", length = 20)
     private String local;
-
+    @Column(name = "token_ws")
+    private String tokenWs;
     public PedidoEntity() {}
 
     public PedidoEntity(String pedidoId, String telefono, String detalle, String indicaciones) {
@@ -87,6 +88,13 @@ public class PedidoEntity {
     public void setDetalle(String detalle) {
         this.detalle = detalle;
     }
+    public String getTokenWs() {
+    return tokenWs;
+}
+
+public void setTokenWs(String tokenWs) {
+    this.tokenWs = tokenWs;
+}
 
     public String getIndicaciones() {
         return indicaciones;

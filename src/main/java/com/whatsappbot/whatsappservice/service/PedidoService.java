@@ -28,4 +28,7 @@ public class PedidoService {
     public List<PedidoEntity> buscarPorEstado(String estado) {
     return pedidoRepository.findByEstado(estado);
     }
+    public PedidoEntity buscarPorToken(String token) {
+    return pedidoRepository.findByTokenWs(token);
+}
 }

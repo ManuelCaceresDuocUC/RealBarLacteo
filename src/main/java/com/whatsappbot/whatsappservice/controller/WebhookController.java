@@ -251,6 +251,8 @@ public class WebhookController {
 
                 PagoResponseDTO pago = transbankService.generarLinkDePago(pedido.getPedidoId(), monto);
                 pedido.setLinkPago(pago.getUrl());
+                pedido.setTokenWs(pago.getToken()); // ✅ Guardamos el token_ws
+
                 pedidoRepository.save(pedido);
 
                 try {
