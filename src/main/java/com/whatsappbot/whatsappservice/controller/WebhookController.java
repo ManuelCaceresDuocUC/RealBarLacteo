@@ -187,6 +187,16 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
         if ("interactive".equalsIgnoreCase(tipo)) {
             JsonNode btn = payload.path("interactiveButtonReply");
             String title = btn.path("title").asText("").toLowerCase();
+            if (title.equals("sí")) {
+                log.info("✍️ Cliente {} eligió agregar indicación personalizada", telefono);
+                watiService.enviarMensajeTexto(telefono, "✍️ Por favor escribe tu indicación a continuación.");
+                return ResponseEntity.ok().build(); // Esperar mensaje libre
+            }
+
+            if (title.equals("no")) {
+                log.info("🚫 Cliente {} no desea agregar indicación personalizada", telefono);
+                return ResponseEntity.ok().build(); // WATI se encargará de enviar los botones de local
+            }
 
             if (title.equals("hyatt") || title.equals("charles")) {
                 String localNormalizado = title.equals("hyatt") ? "HYATT" : "CHARLES";
@@ -288,6 +298,20 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
                 timestampUltimoResumen.put(telefono, resumenTimestamp);
 
                 log.info("✅ Pedido confirmado y link generado para {}. Monto: {}", telefono, monto);
+            }
+        }
+        if ("text".equalsIgnoreCase(tipo)) {
+            if (pedidoContext.indicacionPreguntadaPorTelefono.containsKey(telefono) &&
+                pedidoContext.pedidoTemporalPorTelefono.containsKey(telefono)) {
+
+                String textoLower = texto.trim().toLowerCase();
+
+                // Ignora respuestas típicas que no son indicación
+                if (!textoLower.contains("trigger") && !textoLower.equals("sí") && !textoLower.equals("no")) {
+                    PedidoEntity pedido = pedidoContext.pedidoTemporalPorTelefono.get(telefono);
+                    pedido.setIndicaciones(texto.trim());
+                    log.info("✍️ Indicaciones recibidas para {}: {}", telefono, texto.trim());
+                }
             }
         }
 
