@@ -22,7 +22,6 @@ import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.repository.ProductoStockRepository;
@@ -73,7 +72,6 @@ public class WebhookController {
             }
         }
 
-        // PASO 1: Trigger desde carrito
         if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
             if (pedidoContext.pedidoTemporalPorTelefono.containsKey(telefono)) {
                 log.info("🔁 Trigger ignorado: ya hay un pedido pendiente en memoria para {}", telefono);
@@ -119,18 +117,6 @@ public class WebhookController {
 
                         if (contenidoLower.contains("items del carrito:")) {
                             mensajeCarrito = contenido;
-
-                            if (!pedidoContext.indicacionPreguntadaPorTelefono.getOrDefault(telefono, false)) {
-                                watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
-                                watiService.enviarMensajeBotones(
-                                        telefono,
-                                        "¿Deseas agregar una indicación especial al pedido?",
-                                        "Puedes personalizarlo",
-                                        "",
-                                        List.of("Sí", "No")
-                                );
-                                pedidoContext.indicacionPreguntadaPorTelefono.put(telefono, true);
-                            }
                             break;
                         }
                     }
@@ -145,16 +131,29 @@ public class WebhookController {
 
             if (mensajeCarrito == null) {
                 watiService.enviarMensajeTexto(telefono, "❌ No se encontró el mensaje con los items del carrito. Intenta de nuevo.");
+                log.warn("⚠️ Carrito no encontrado para {}. Trigger cancelado.", telefono);
                 return ResponseEntity.ok().build();
             }
 
             String detalle = extraerDetalleFlexible(mensajeCarrito);
             List<String> productos = extraerProductosDesdeDetalle(detalle);
 
+            if (productos.isEmpty()) {
+                watiService.enviarMensajeTexto(telefono, "❌ No se detectaron productos válidos en tu carrito. Intenta nuevamente.");
+                log.warn("⚠️ Carrito sin productos válidos para {}. Trigger cancelado.", telefono);
+                return ResponseEntity.ok().build();
+            }
+
             for (String producto : productos) {
                 var stock = productoStockRepository.findByNombreIgnoreCase(producto);
-                if (stock.isPresent() && !stock.get().getDisponible()) {
-                    watiService.enviarMensajeTexto(telefono, "❌ El producto '" + producto + "' no está disponible. Por favor edita tu pedido.");
+                if (stock.isEmpty() || !stock.get().getDisponible()) {
+                    String advertencia = "❌ El producto '" + producto + "' no está disponible. Por favor edita tu pedido.";
+                    watiService.enviarMensajeTexto(telefono, advertencia);
+                    log.warn("🚫 Producto sin stock '{}' detectado en carrito de {}. Pedido descartado.", producto, telefono);
+
+                    pedidoContext.pedidoTemporalPorTelefono.remove(telefono);
+                    pedidoContext.indicacionPreguntadaPorTelefono.remove(telefono);
+
                     return ResponseEntity.ok().build();
                 }
             }
@@ -166,115 +165,19 @@ public class WebhookController {
             pedido.setDetalle(detalle);
             pedidoContext.pedidoTemporalPorTelefono.put(telefono, pedido);
 
+            watiService.enviarMensajeTexto(telefono, "✅ Stock verificado\nCONTINUAR");
+            watiService.enviarMensajeBotones(
+                telefono,
+                "¿Deseas agregar una indicación especial al pedido?",
+                "Puedes personalizarlo",
+                "",
+                List.of("Sí", "No")
+            );
+            pedidoContext.indicacionPreguntadaPorTelefono.put(telefono, true);
+
+            log.info("✅ Pedido válido inicializado en memoria para {} con ID {}", telefono, pedidoId);
+
             return ResponseEntity.ok().build();
-        }
-
-        // PASO 2: Selección del local
-        if ("interactive".equalsIgnoreCase(tipo)) {
-            JsonNode btn = payload.path("interactiveButtonReply");
-            String title = btn.path("title").asText("").toLowerCase();
-
-            if (title.equals("hyatt") || title.equals("charles")) {
-                String localNormalizado = title.equals("hyatt") ? "HYATT" : "CHARLES";
-                log.info("✅ Local {} asignado al pedido temporal de {}", localNormalizado, telefono);
-
-                PedidoEntity pedido = pedidoContext.pedidoTemporalPorTelefono.get(telefono);
-                if (pedido == null) {
-                    watiService.enviarMensajeTexto(telefono, "⚠️ No se encontró un pedido pendiente en memoria. Intenta de nuevo desde el carrito.");
-                    return ResponseEntity.ok().build();
-                }
-
-                pedido.setLocal(localNormalizado);
-
-                String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
-                var headers = new HttpHeaders();
-                headers.set("Authorization", "Bearer " + watiApiKey);
-                var entity = new HttpEntity<>(headers);
-
-                JsonNode mensajes;
-                List<JsonNode> mensajesOrdenados = new ArrayList<>();
-                String mensajeResumen = null;
-                String indicacion = pedido.getIndicaciones();
-                long triggerTimestamp = payload.path("timestamp").asLong(0);
-                int reintentos = 0;
-                long resumenTimestamp = 0;
-
-                while (mensajeResumen == null && reintentos < 15) {
-                    try {
-                        var response = restTemplate.exchange(url, HttpMethod.GET, entity, JsonNode.class);
-                        mensajes = response.getBody().path("messages").path("items");
-
-                        if (mensajes == null || !mensajes.isArray()) {
-                            TimeUnit.SECONDS.sleep(2);
-                            reintentos++;
-                            continue;
-                        }
-
-                        mensajesOrdenados.clear();
-                        mensajes.forEach(mensajesOrdenados::add);
-                        mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
-
-                        for (JsonNode msg : mensajesOrdenados) {
-                            long msgTimestamp = obtenerTimestamp(msg);
-                            if (msgTimestamp <= triggerTimestamp) continue;
-
-                            String finalText = msg.path("finalText").asText("");
-                            String textMsg = msg.path("text").asText("");
-                            String contenido = !finalText.isBlank() ? finalText : textMsg;
-                            String contenidoLower = contenido.toLowerCase();
-
-                            if (contenidoLower.contains("desde el carrito") && contenidoLower.contains("total estimado")) {
-                                mensajeResumen = contenido;
-                                resumenTimestamp = msgTimestamp;
-                            }
-                            if (contenidoLower.startsWith("indicacion:") && indicacion == null) {
-                                indicacion = contenido.substring(contenido.indexOf(":") + 1).trim();
-                            }
-                        }
-
-                        if (mensajeResumen == null) {
-                            TimeUnit.SECONDS.sleep(2);
-                            reintentos++;
-                        }
-
-                    } catch (Exception e) {
-                        log.error("❌ Error obteniendo mensaje resumen", e);
-                        reintentos++;
-                    }
-                }
-
-                String detalle = extraerDetalleFlexible(mensajeResumen);
-                int monto = extraerMontoFlexible(mensajeResumen);
-                if (detalle == null || monto <= 0) {
-                    watiService.enviarMensajeTexto(telefono, "❌ No se pudo procesar el pedido. Intenta nuevamente desde el carrito.");
-                    return ResponseEntity.ok().build();
-                }
-
-                pedido.setDetalle(detalle);
-                pedido.setIndicaciones(indicacion);
-                pedido.setMonto((double) monto);
-                pedido.setEstado("pendiente");
-                pedidoRepository.save(pedido);
-
-                PagoResponseDTO pago = transbankService.generarLinkDePago(pedido.getPedidoId(), monto);
-                pedido.setLinkPago(pago.getUrl());
-                pedido.setTokenWs(pago.getToken());
-                pedidoRepository.save(pedido);
-
-                try {
-                    watiService.enviarMensajePagoEstatico(telefono, pedido.getMonto(), pago.getUrl());
-                } catch (Exception e) {
-                    log.error("❌ Error enviando plantilla de pago", e);
-                }
-
-                pedidoContext.pedidoTemporalPorTelefono.remove(telefono);
-                pedidoContext.indicacionPreguntadaPorTelefono.remove(telefono);
-                pedidoContext.ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
-                pedidosFinalizados.put(telefono, LocalDateTime.now());
-                timestampUltimoResumen.put(telefono, resumenTimestamp);
-
-                return ResponseEntity.ok().build();
-            }
         }
 
         return ResponseEntity.ok().build();
@@ -337,4 +240,3 @@ public class WebhookController {
         return 0;
     }
 }
-
