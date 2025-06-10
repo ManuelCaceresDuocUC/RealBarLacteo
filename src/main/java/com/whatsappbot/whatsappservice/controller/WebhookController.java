@@ -1,5 +1,6 @@
 package com.whatsappbot.whatsappservice.controller;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -52,7 +53,7 @@ public class WebhookController {
     private final Map<String, Long> timestampUltimoResumen = new ConcurrentHashMap<>();
 
     @PostMapping("/wati")
-    public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
+public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) throws IOException {
         String telefono = payload.path("waId").asText();
         String texto = payload.path("text").asText("");
         String tipo = payload.path("type").asText();
@@ -178,6 +179,109 @@ public class WebhookController {
             log.info("✅ Pedido válido inicializado en memoria para {} con ID {}", telefono, pedidoId);
 
             return ResponseEntity.ok().build();
+        }
+
+        if ("interactive".equalsIgnoreCase(tipo)) {
+            JsonNode btn = payload.path("interactiveButtonReply");
+            String title = btn.path("title").asText("").toLowerCase();
+
+            if (title.equals("hyatt") || title.equals("charles")) {
+                String localNormalizado = title.equals("hyatt") ? "HYATT" : "CHARLES";
+                log.info("✅ Local {} asignado al pedido temporal de {}", localNormalizado, telefono);
+
+                PedidoEntity pedido = pedidoContext.pedidoTemporalPorTelefono.get(telefono);
+                if (pedido == null) {
+                    watiService.enviarMensajeTexto(telefono, "⚠️ No se encontró un pedido pendiente en memoria. Intenta de nuevo desde el carrito.");
+                    return ResponseEntity.ok().build();
+                }
+
+                pedido.setLocal(localNormalizado);
+
+                String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
+                var headers = new HttpHeaders();
+                headers.set("Authorization", "Bearer " + watiApiKey);
+                var entity = new HttpEntity<>(headers);
+
+                JsonNode mensajes;
+                List<JsonNode> mensajesOrdenados = new ArrayList<>();
+                String mensajeResumen = null;
+                String indicacion = pedido.getIndicaciones();
+                long triggerTimestamp = payload.path("timestamp").asLong(0);
+                int reintentos = 0;
+                long resumenTimestamp = 0;
+
+                while (mensajeResumen == null && reintentos < 15) {
+                    try {
+                        var response = restTemplate.exchange(url, HttpMethod.GET, entity, JsonNode.class);
+                        mensajes = response.getBody().path("messages").path("items");
+
+                        if (mensajes == null || !mensajes.isArray()) {
+                            TimeUnit.SECONDS.sleep(2);
+                            reintentos++;
+                            continue;
+                        }
+
+                        mensajesOrdenados.clear();
+                        mensajes.forEach(mensajesOrdenados::add);
+                        mensajesOrdenados.sort(Comparator.comparingLong(this::obtenerTimestamp));
+
+                        for (JsonNode msg : mensajesOrdenados) {
+                            long msgTimestamp = obtenerTimestamp(msg);
+                            if (msgTimestamp <= triggerTimestamp) continue;
+
+                            String finalText = msg.path("finalText").asText("");
+                            String textMsg = msg.path("text").asText("");
+                            String contenido = !finalText.isBlank() ? finalText : textMsg;
+                            String contenidoLower = contenido.toLowerCase();
+
+                            if (contenidoLower.contains("desde el carrito") && contenidoLower.contains("total estimado")) {
+                                mensajeResumen = contenido;
+                                resumenTimestamp = msgTimestamp;
+                            }
+                            if (contenidoLower.startsWith("indicacion:") && indicacion == null) {
+                                indicacion = contenido.substring(contenido.indexOf(":" ) + 1).trim();
+                            }
+                        }
+
+                        if (mensajeResumen == null) {
+                            TimeUnit.SECONDS.sleep(2);
+                            reintentos++;
+                        }
+
+                    } catch (Exception e) {
+                        log.error("❌ Error obteniendo mensaje resumen", e);
+                        reintentos++;
+                    }
+                }
+
+                String detalle = extraerDetalleFlexible(mensajeResumen);
+                int monto = extraerMontoFlexible(mensajeResumen);
+                if (detalle == null || monto <= 0) {
+                    watiService.enviarMensajeTexto(telefono, "❌ No se pudo procesar el pedido. Intenta nuevamente desde el carrito.");
+                    return ResponseEntity.ok().build();
+                }
+
+                pedido.setDetalle(detalle);
+                pedido.setIndicaciones(indicacion);
+                pedido.setMonto((double) monto);
+                pedido.setEstado("pendiente");
+                pedidoRepository.save(pedido);
+
+                var pago = transbankService.generarLinkDePago(pedido.getPedidoId(), monto);
+                pedido.setLinkPago(pago.getUrl());
+                pedido.setTokenWs(pago.getToken());
+                pedidoRepository.save(pedido);
+
+                watiService.enviarMensajePagoEstatico(telefono, pedido.getMonto(), pago.getUrl());
+
+                pedidoContext.pedidoTemporalPorTelefono.remove(telefono);
+                pedidoContext.indicacionPreguntadaPorTelefono.remove(telefono);
+                pedidoContext.ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+                pedidosFinalizados.put(telefono, LocalDateTime.now());
+                timestampUltimoResumen.put(telefono, resumenTimestamp);
+
+                log.info("✅ Pedido confirmado y link generado para {}. Monto: {}", telefono, monto);
+            }
         }
 
         return ResponseEntity.ok().build();
