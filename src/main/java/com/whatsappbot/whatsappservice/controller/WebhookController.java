@@ -53,7 +53,7 @@ public class WebhookController {
     private final Map<String, Long> timestampUltimoResumen = new ConcurrentHashMap<>();
 
     @PostMapping("/wati")
-public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) throws IOException, InterruptedException {
+public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) throws IOException {
         String telefono = payload.path("waId").asText();
         String texto = payload.path("text").asText("");
         String tipo = payload.path("type").asText();
@@ -91,8 +91,7 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) throws IO
             String mensajeCarrito = null;
             int reintentos = 0;
             long triggerTimestamp = payload.path("timestamp").asLong(0);
-            TimeUnit.SECONDS.sleep(5);
-
+            
             while (mensajeCarrito == null && reintentos < 20) {
                 try {
                     TimeUnit.SECONDS.sleep(2);
