@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -60,39 +61,29 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
         String messageId = payload.path("whatsappMessageId").asText();
         // ✅ Ignorar triggers automáticos si ya hay un pedido pagado reciente
         if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
-            PedidoEntity ultimoPagado = pedidoRepository
-                .findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(telefono, "pagado")
-                .orElse(null);
 
-            if (ultimoPagado != null && ultimoPagado.getFechaCreacion().isAfter(LocalDateTime.now().minusMinutes(3))) {
-                log.warn("⏳ Trigger ignorado: pedido ya fue pagado recientemente por {}", telefono);
-                return ResponseEntity.ok().build();
-            }
-        }
-        if (telefono.isBlank() || messageId.isBlank()) return ResponseEntity.ok().build();
-        if (messageId.equals(pedidoContext.ultimoMensajeProcesadoPorNumero.get(telefono))) return ResponseEntity.ok().build();
+    // 🔒 Verificar si ya hay un pedido pagado recientemente (últimos 5 minutos)
+    Optional<PedidoEntity> ultimoPagado = pedidoRepository
+        .findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(telefono, "pagado");
 
-        // 💡 Registrar de inmediato para evitar reprocesamiento en caso de error posterior
-        pedidoContext.ultimoMensajeProcesadoPorNumero.put(telefono, messageId);
+    if (ultimoPagado.isPresent() && 
+    ultimoPagado.get().getFechaCreacion().isAfter(LocalDateTime.now().minusMinutes(5))) {
+    
+    log.warn("⛔ Trigger bloqueado para {}: ya existe un pedido pagado reciente", telefono);
+    
+    watiService.enviarMensajeTexto(telefono,
+        "🕒 Ya recibimos tu pedido y está en proceso. Por favor espera unos minutos antes de realizar uno nuevo. ¡Gracias por tu preferencia! 🙌");
 
-        if (pedidosFinalizados.containsKey(telefono)) {
-            LocalDateTime fin = pedidosFinalizados.get(telefono);
-            if (fin.plusMinutes(2).isAfter(LocalDateTime.now())) {
-                log.info("📦 Pedido ya finalizado recientemente para {}, ignorando mensaje", telefono);
-                return ResponseEntity.ok().build();
-            } else {
-                pedidosFinalizados.remove(telefono);
-                timestampUltimoResumen.remove(telefono);
-            }
-        }
+    return ResponseEntity.ok().build();
+}
 
-        if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
-            if (pedidoContext.pedidoTemporalPorTelefono.containsKey(telefono)) {
-                log.info("🔁 Trigger ignorado: ya hay un pedido pendiente en memoria para {}", telefono);
-                return ResponseEntity.ok().build();
-            }
+    // ⏳ También se puede bloquear si ya hay un pedido pendiente en memoria
+    if (pedidoContext.pedidoTemporalPorTelefono.containsKey(telefono)) {
+        log.info("🔁 Trigger ignorado: ya hay un pedido pendiente en memoria para {}", telefono);
+        return ResponseEntity.ok().build();
+    }
 
-            log.info("🟢 Trigger recibido para validar stock de {}", telefono);
+    log.info("🟢 Trigger recibido para validar stock de {}", telefono);
 
             String url = "https://live-mt-server.wati.io/442590/api/v1/getMessages/" + telefono;
             var headers = new HttpHeaders();
