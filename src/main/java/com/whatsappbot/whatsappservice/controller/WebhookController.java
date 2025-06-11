@@ -61,23 +61,24 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
         String messageId = payload.path("whatsappMessageId").asText();
         // ✅ Ignorar triggers automáticos si ya hay un pedido pagado reciente
         if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
+// ✅ Ignorar si el trigger es muy antiguo (más de 2 minutos)
+    long triggerTimestamp = payload.path("timestamp").asLong(0);
+    long ahora = System.currentTimeMillis() / 1000;
+    if (Math.abs(ahora - triggerTimestamp) > 120) {
+        log.warn("⏳ Trigger ignorado por antigüedad para {}. Timestamp: {}", telefono, triggerTimestamp);
+        return ResponseEntity.ok().build();
+    }
 
-    // 🔒 Verificar si ya hay un pedido pagado recientemente (últimos 5 minutos)
+    // 🔒 Ignorar si ya hay un pedido pagado reciente (últimos 5 minutos)
     Optional<PedidoEntity> ultimoPagado = pedidoRepository
         .findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(telefono, "pagado");
-
     if (ultimoPagado.isPresent() && 
-    ultimoPagado.get().getFechaCreacion().isAfter(LocalDateTime.now().minusMinutes(5))) {
-    
-    log.warn("⛔ Trigger bloqueado para {}: ya existe un pedido pagado reciente", telefono);
-    
-    watiService.enviarMensajeTexto(telefono,
-        "🕒 Ya recibimos tu pedido y está en proceso. Por favor espera unos minutos antes de realizar uno nuevo. ¡Gracias por tu preferencia! 🙌");
+        ultimoPagado.get().getFechaCreacion().isAfter(LocalDateTime.now().minusMinutes(5))) {
+        log.warn("⛔ Trigger bloqueado por pedido pagado reciente para {}", telefono);
+        return ResponseEntity.ok().build();
+    }
 
-    return ResponseEntity.ok().build();
-}
-
-    // ⏳ También se puede bloquear si ya hay un pedido pendiente en memoria
+    // ⏳ Ignorar si ya hay un pedido en proceso en memoria
     if (pedidoContext.pedidoTemporalPorTelefono.containsKey(telefono)) {
         log.info("🔁 Trigger ignorado: ya hay un pedido pendiente en memoria para {}", telefono);
         return ResponseEntity.ok().build();
@@ -94,7 +95,6 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
             List<JsonNode> mensajesOrdenados = new ArrayList<>();
             String mensajeCarrito = null;
             int reintentos = 0;
-            long triggerTimestamp = payload.path("timestamp").asLong(0);
 
             while (mensajeCarrito == null && reintentos < 20) {
                 try {
