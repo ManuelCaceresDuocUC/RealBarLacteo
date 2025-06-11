@@ -58,7 +58,17 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
         String texto = payload.path("text").asText("");
         String tipo = payload.path("type").asText();
         String messageId = payload.path("whatsappMessageId").asText();
+        // ✅ Ignorar triggers automáticos si ya hay un pedido pagado reciente
+        if ("order".equalsIgnoreCase(tipo) && texto.equalsIgnoreCase("#trigger_view_cart")) {
+            PedidoEntity ultimoPagado = pedidoRepository
+                .findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(telefono, "pagado")
+                .orElse(null);
 
+            if (ultimoPagado != null && ultimoPagado.getFechaCreacion().isAfter(LocalDateTime.now().minusMinutes(3))) {
+                log.warn("⏳ Trigger ignorado: pedido ya fue pagado recientemente por {}", telefono);
+                return ResponseEntity.ok().build();
+            }
+        }
         if (telefono.isBlank() || messageId.isBlank()) return ResponseEntity.ok().build();
         if (messageId.equals(pedidoContext.ultimoMensajeProcesadoPorNumero.get(telefono))) return ResponseEntity.ok().build();
 

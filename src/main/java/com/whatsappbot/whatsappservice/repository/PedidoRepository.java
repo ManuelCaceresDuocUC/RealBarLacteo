@@ -29,5 +29,6 @@ Optional<PedidoEntity> findTopByTelefonoOrderByFechaCreacionDesc(String telefono
 List<PedidoEntity> findByEstadoAndFechaCreacionBefore(String estado, LocalDateTime fechaCreacion);
 PedidoEntity findByTokenWs(String tokenWs);
 
+Optional<PedidoEntity> findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(String telefono, String estado);
 
 }
