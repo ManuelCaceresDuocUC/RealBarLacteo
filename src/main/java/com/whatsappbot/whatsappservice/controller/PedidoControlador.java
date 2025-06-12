@@ -5,13 +5,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
@@ -26,7 +27,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@RestController
+@Controller
+
 @RequestMapping("/api/pedidos")
 @RequiredArgsConstructor
 public class PedidoControlador {
@@ -79,47 +81,56 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
     }
 }
 @RequestMapping(value = "/confirmacion", method = {RequestMethod.GET, RequestMethod.POST})
-public ResponseEntity<String> confirmarPago(@RequestParam("token_ws") String token) {
+public String confirmarPago(@RequestParam("token_ws") String token, Model model) {
     try {
+        // 🔄 Confirmar transacción con Transbank
         WebpayPlusTransactionCommitResponse response = transbankService.confirmarTransaccion(token);
         String buyOrder = response.getBuyOrder();
 
         Optional<PedidoEntity> pedidoOpt = pedidoRepository.findByPedidoId(buyOrder);
-        if (pedidoOpt.isPresent()) {
-            PedidoEntity pedido = pedidoOpt.get();
-            pedido.setEstado("pagado");
-            pedidoRepository.save(pedido);
-
-            // ✅ Recargar el pedido actualizado para asegurar que incluya el LOCAL
-            pedido = pedidoRepository.findByPedidoId(buyOrder).orElseThrow();
-
-            // ✅ Generar PDF de la comanda con datos actualizados
-            String urlComanda = comandaService.generarPDF(pedido);
-            System.out.println("🔗 URL comanda generada: " + urlComanda);
-            System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
-
-            // ✅ Enviar plantilla simple de confirmación por WhatsApp
-            if (urlComanda != null) {
-                watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
-            } else {
-                log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
-                watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
-            }
-
-            log.info("✅ Pago confirmado para pedido {}", buyOrder);
-
-            // ✅ Elimina los datos temporales en memoria para reiniciar flujo
-            pedidoContext.pedidoTemporalPorTelefono.remove(pedido.getTelefono());
-pedidoContext.indicacionPreguntadaPorTelefono.remove(pedido.getTelefono());
-pedidoContext.ultimoMensajeProcesadoPorNumero.remove(pedido.getTelefono());
-            return ResponseEntity.ok("✅ Pago confirmado, comanda generada y mensaje enviado.");
-
-        } else {
-            return ResponseEntity.status(404).body("❌ Pedido no encontrado");
+        if (pedidoOpt.isEmpty()) {
+            model.addAttribute("mensaje", "❌ No se encontró el pedido.");
+            return "error";
         }
+
+        PedidoEntity pedido = pedidoOpt.get();
+
+        // ✅ Actualizar estado
+        pedido.setEstado("pagado");
+        pedidoRepository.save(pedido);
+
+        // ✅ Volver a cargar para asegurar que tenga todos los datos actualizados
+        pedido = pedidoRepository.findByPedidoId(buyOrder).orElseThrow();
+
+        // 🧾 Generar PDF
+        String urlComanda = comandaService.generarPDF(pedido);
+        System.out.println("🔗 URL comanda generada: " + urlComanda);
+        System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
+
+        // ✅ Enviar mensaje por WhatsApp
+        if (urlComanda != null) {
+            watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
+        } else {
+            log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
+            watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
+        }
+
+        // 🧹 Limpiar datos temporales
+        pedidoContext.pedidoTemporalPorTelefono.remove(pedido.getTelefono());
+        pedidoContext.indicacionPreguntadaPorTelefono.remove(pedido.getTelefono());
+        pedidoContext.ultimoMensajeProcesadoPorNumero.remove(pedido.getTelefono());
+
+        log.info("✅ Pago confirmado para pedido {}", buyOrder);
+
+        // 📦 Agregar datos al modelo para mostrar en HTML
+        model.addAttribute("pedido", pedido);
+        model.addAttribute("urlComanda", urlComanda);
+        return "confirmacion";
+
     } catch (Exception e) {
         log.error("❌ Error interno al confirmar pago", e);
-        return ResponseEntity.status(500).body("❌ Error interno: " + e.getMessage());
+        model.addAttribute("mensaje", "Ocurrió un error al confirmar el pago.");
+        return "error";
     }
 }
 
