@@ -74,8 +74,8 @@ public class WatiService {
         String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 
         Map<String, Object> data = new HashMap<>();
-        data.put("template_name", "confirmacion_pedido_link");
-        data.put("broadcast_name", "confirmacion_pedido_link");
+        data.put("template_name", "confirmacion_pedido_link_2");
+        data.put("broadcast_name", "confirmacion_pedido_link_2");
 
         List<Map<String, String>> parametros = new ArrayList<>();
         parametros.add(Map.of("name", "1", "value", pedidoId));
