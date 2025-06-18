@@ -1,25 +1,60 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import java.util.List;
-
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.whatsappbot.whatsappservice.model.ProductoCatalogo;
-import com.whatsappbot.whatsappservice.service.CatalogoService;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
-import lombok.RequiredArgsConstructor;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
 
 @RestController
-@RequestMapping("/api/catalogo")
-@RequiredArgsConstructor
+@Slf4j
 public class CatalogoController {
 
-    private final CatalogoService catalogoService;
+    private static final String CSV_URL = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/catalogo_fronted.csv";
 
-    @GetMapping
-    public List<ProductoCatalogo> obtenerCatalogo() {
-        return catalogoService.obtenerCatalogo();
+    @GetMapping("/api/catalogo")
+    public ResponseEntity<List<ProductoDTO>> obtenerCatalogo() {
+        List<ProductoDTO> productos = new ArrayList<>();
+
+        try {
+            URL url = new URL(CSV_URL);
+            try (CSVReader csvReader = new CSVReaderBuilder(
+                    new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))
+                    .withSkipLines(1) // saltar encabezado
+                    .build()) {
+
+                String[] linea;
+                while ((linea = csvReader.readNext()) != null) {
+                    if (linea.length >= 3) {
+                        ProductoDTO producto = new ProductoDTO(linea[0], linea[1], linea[2]);
+                        productos.add(producto);
+                    }
+                }
+            }
+            return ResponseEntity.ok(productos);
+        } catch (Exception e) {
+            log.error("❌ Error al leer el catálogo desde S3", e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    static class ProductoDTO {
+        private String nombre;
+        private String descripcion;
+        private String imagen;
     }
 }

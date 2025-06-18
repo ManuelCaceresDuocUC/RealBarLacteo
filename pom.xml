@@ -67,7 +67,12 @@
             <artifactId>regions</artifactId>
             <version>2.25.15</version>
         </dependency>
-  
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.7.1</version>
+        </dependency>
+        
         <!-- Otras utilidades -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
