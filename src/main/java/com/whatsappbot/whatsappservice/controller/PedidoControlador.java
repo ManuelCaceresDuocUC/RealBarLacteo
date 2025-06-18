@@ -64,8 +64,8 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
         pedido.setEstado("pendiente");
         pedidoRepository.save(pedido);
 
-        PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, 1000);
-        String link = pago.getUrl();
+int monto = Integer.parseInt(payload.get("monto")); // ← lo envías desde el frontend
+PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, (double) monto);        String link = pago.getUrl();
 
         // ✅ Usamos HashMap para permitir null
         Map<String, Object> respuesta = new java.util.HashMap<>();

@@ -277,7 +277,7 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
 
                 pedido.setDetalle(detalle);
                 pedido.setIndicaciones(indicacion);
-                pedido.setMonto((double) monto);
+                pedido.setMonto( monto);
                 pedido.setEstado("pendiente");
                 pedidoRepository.save(pedido);
 

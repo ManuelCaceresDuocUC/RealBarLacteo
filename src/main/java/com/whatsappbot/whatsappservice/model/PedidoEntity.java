@@ -31,7 +31,7 @@ public class PedidoEntity {
     private String estado;
 
     @Column(name = "monto")
-    private Double monto;
+    private int monto;
 
     @Column(name = "link_pago", columnDefinition = "TEXT")
     private String linkPago;
@@ -112,11 +112,11 @@ public void setTokenWs(String tokenWs) {
         this.estado = estado;
     }
 
-    public Double getMonto() {
+    public int getMonto() {
         return monto;
     }
 
-    public void setMonto(Double monto) {
+    public void setMonto(int monto) {
         this.monto = monto;
     }
 
