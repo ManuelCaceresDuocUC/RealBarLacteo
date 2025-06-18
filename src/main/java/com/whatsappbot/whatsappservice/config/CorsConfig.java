@@ -15,7 +15,10 @@ public class CorsConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         log.info("🔧 Aplicando configuración CORS personalizada...");
         registry.addMapping("/**")
-            .allowedOrigins("https://barlacteo-catalogo.s3.us-east-1.amazonaws.com")
+            .allowedOrigins(
+                "http://localhost:3000", 
+                "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com"
+            )
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
             .allowedHeaders("*")
             .allowCredentials(false);
