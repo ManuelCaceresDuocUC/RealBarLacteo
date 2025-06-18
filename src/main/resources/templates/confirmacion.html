@@ -22,5 +22,12 @@
     <h1 class="text-success">¡Pago confirmado!</h1>
     <p class="lead">Tu pedido fue recibido con éxito.</p>
     <p>Estará listo para el retiro en aproximadamente 30 minutos.</p>
+    <p class="text-muted mt-4">Serás redirigido al inicio en unos segundos...</p>
+
+    <script>
+        setTimeout(() => {
+            window.location.href = "http://localhost:3000"; // ⬅️ cambia esto a tu dominio si estás en producción
+        }, 7000); // 7000 ms = 7 segundos
+    </script>
 </body>
 </html>
