@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 
@@ -29,24 +31,30 @@ public class CatalogoController {
 
         try {
             URL url = new URL(CSV_URL);
+            CSVParser parser = new CSVParserBuilder()
+                    .withSeparator(';') // Usa punto y coma como separador
+                    .build();
+
             try (CSVReader csvReader = new CSVReaderBuilder(
                     new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))
-                    .withSkipLines(1) // Saltar encabezado
+                    .withCSVParser(parser)
+                    .withSkipLines(1)
                     .build()) {
 
                 String[] linea;
                 while ((linea = csvReader.readNext()) != null) {
-                    if (linea.length >= 9) {
+                    if (linea.length >= 4) {
                         ProductoDTO producto = new ProductoDTO(
-                            linea[1], // title
-                            linea[2], // description
-                            linea[8], // image_link
-                            linea[5]  // price
+                                linea[0].trim(), // title
+                                linea[1].trim(), // description
+                                linea[2].trim(), // price
+                                linea[3].trim()  // image_link
                         );
                         productos.add(producto);
                     }
                 }
             }
+
             return ResponseEntity.ok(productos);
         } catch (Exception e) {
             log.error("❌ Error al leer el catálogo desde S3", e);
@@ -60,7 +68,7 @@ public class CatalogoController {
     static class ProductoDTO {
         private String nombre;
         private String descripcion;
-        private String imagen;
         private String precio;
+        private String imagen;
     }
 }
