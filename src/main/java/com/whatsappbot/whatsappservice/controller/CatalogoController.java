@@ -31,13 +31,18 @@ public class CatalogoController {
             URL url = new URL(CSV_URL);
             try (CSVReader csvReader = new CSVReaderBuilder(
                     new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))
-                    .withSkipLines(1) // saltar encabezado
+                    .withSkipLines(1) // Saltar encabezado
                     .build()) {
 
                 String[] linea;
                 while ((linea = csvReader.readNext()) != null) {
-                    if (linea.length >= 3) {
-                        ProductoDTO producto = new ProductoDTO(linea[0], linea[1], linea[2]);
+                    if (linea.length >= 9) {
+                        ProductoDTO producto = new ProductoDTO(
+                            linea[1], // title
+                            linea[2], // description
+                            linea[8], // image_link
+                            linea[5]  // price
+                        );
                         productos.add(producto);
                     }
                 }
@@ -56,5 +61,6 @@ public class CatalogoController {
         private String nombre;
         private String descripcion;
         private String imagen;
+        private String precio;
     }
 }
