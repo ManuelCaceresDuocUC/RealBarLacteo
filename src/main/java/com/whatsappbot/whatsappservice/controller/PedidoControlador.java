@@ -56,29 +56,32 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
     }
 
     try {
-        PedidoEntity pedido = new PedidoEntity();
-        pedido.setPedidoId(pedidoId);
-        pedido.setTelefono(telefono);
-        pedido.setDetalle(detalle);
-        pedido.setIndicaciones(null); // esto luego puede venir desde el flujo de indicaciones
-        pedido.setEstado("pendiente");
-        pedidoRepository.save(pedido);
+    PedidoEntity pedido = new PedidoEntity();
+    pedido.setPedidoId(pedidoId);
+    pedido.setTelefono(telefono);
+    pedido.setDetalle(detalle);
+    pedido.setIndicaciones(null);
+    pedido.setEstado("pendiente");
 
-int monto = Integer.parseInt(payload.get("monto")); // ← lo envías desde el frontend
-PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, (double) monto);        String link = pago.getUrl();
+    int monto = Integer.parseInt(payload.get("monto"));
+    pedido.setMonto(monto); // ✅ ahora sí se setea
 
-        // ✅ Usamos HashMap para permitir null
-        Map<String, Object> respuesta = new java.util.HashMap<>();
-        respuesta.put("mensaje", "Pedido creado y link enviado por WhatsApp");
-        respuesta.put("pedidoId", pedidoId);
-        respuesta.put("linkPago", link);
+    PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
+    pedido.setLinkPago(pago.getUrl());
+    pedido.setTokenWs(pago.getToken());
 
-        return ResponseEntity.ok(respuesta);
+    pedidoRepository.save(pedido); // ✅ solo una vez, al final
 
-    } catch (Exception e) {
-        log.error("❌ Error al crear pedido", e);
-        return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
-    }
+    Map<String, Object> respuesta = new java.util.HashMap<>();
+    respuesta.put("mensaje", "Pedido creado y link enviado por WhatsApp");
+    respuesta.put("pedidoId", pedidoId);
+    respuesta.put("linkPago", pago.getUrl());
+
+    return ResponseEntity.ok(respuesta);
+} catch (Exception e) {
+    log.error("❌ Error al crear pedido", e);
+    return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
+}
 }
 @RequestMapping(value = "/confirmacion", method = {RequestMethod.GET, RequestMethod.POST})
 public String confirmarPago(@RequestParam("token_ws") String token, Model model) {
