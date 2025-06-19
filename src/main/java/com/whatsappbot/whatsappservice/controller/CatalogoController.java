@@ -1,19 +1,5 @@
 package com.whatsappbot.whatsappservice.controller;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.beans.factory.annotation.Autowired;
-import com.whatsappbot.whatsappservice.repository.PedidoRepository;
-import com.whatsappbot.whatsappservice.service.TransbankService;
-
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -22,12 +8,26 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
+import com.whatsappbot.whatsappservice.repository.PedidoRepository;
+import com.whatsappbot.whatsappservice.service.TransbankService;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @Slf4j
@@ -114,6 +114,6 @@ public ResponseEntity<?> crearPedidoAutoservicio(@RequestBody PedidoRequestDTO r
     @Data
     public class PedidoRequestDTO {
     private String detalle;
-    private int monto;
+    private double monto;
 }
 }

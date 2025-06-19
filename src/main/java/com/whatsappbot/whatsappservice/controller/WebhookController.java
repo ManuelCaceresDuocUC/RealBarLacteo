@@ -269,7 +269,7 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
                 }
 
                 String detalle = extraerDetalleFlexible(mensajeResumen);
-                int monto = extraerMontoFlexible(mensajeResumen);
+                double monto = extraerMontoFlexible(mensajeResumen);
                 if (detalle == null || monto <= 0) {
                     watiService.enviarMensajeTexto(telefono, "❌ No se pudo procesar el pedido. Intenta nuevamente desde el carrito.");
                     return ResponseEntity.ok().build();

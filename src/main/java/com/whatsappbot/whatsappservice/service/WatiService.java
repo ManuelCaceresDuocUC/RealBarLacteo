@@ -100,7 +100,7 @@ public class WatiService {
         enviarPostWati(url, data, "plantilla de ayuda");
     }
 
-    public void enviarMensajePagoEstatico(String telefono, int total, String linkPago) throws IOException {
+    public void enviarMensajePagoEstatico(String telefono, double total, String linkPago) throws IOException {
         telefono = telefono.replace("+", "");
         String url = watiApiUrl + "/" + tenantId + "/api/v1/sendTemplateMessage?whatsappNumber=" + telefono;
 

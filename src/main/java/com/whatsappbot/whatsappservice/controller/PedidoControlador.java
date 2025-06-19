@@ -63,7 +63,7 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
     pedido.setIndicaciones(null);
     pedido.setEstado("pendiente");
 
-    int monto = Integer.parseInt(payload.get("monto"));
+    double monto = Integer.parseInt(payload.get("monto"));
     pedido.setMonto(monto); // ✅ ahora sí se setea
 
     PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
