@@ -1,6 +1,7 @@
 package com.whatsappbot.whatsappservice.service;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import org.springframework.scheduling.annotation.Scheduled;
@@ -22,7 +23,7 @@ public class PedidoCleanupService {
 
     @Scheduled(fixedRate = 300000) // Cada 5 minutos
     public void limpiarPedidosPendientesAntiguos() {
-        LocalDateTime limite = LocalDateTime.now().minusMinutes(15);
+OffsetDateTime limite = OffsetDateTime.now(ZoneId.of("America/Santiago")).minusMinutes(15);
         List<PedidoEntity> antiguos = pedidoRepository.findByEstadoAndFechaCreacionBefore("pendiente", limite);
 
         if (!antiguos.isEmpty()) {
