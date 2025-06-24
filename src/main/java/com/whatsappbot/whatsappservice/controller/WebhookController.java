@@ -2,6 +2,8 @@ package com.whatsappbot.whatsappservice.controller;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -73,10 +75,11 @@ public ResponseEntity<?> recibirMensaje(@RequestBody JsonNode payload) {
     Optional<PedidoEntity> ultimoPagado = pedidoRepository
         .findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(telefono, "pagado");
     if (ultimoPagado.isPresent() && 
-        ultimoPagado.get().getFechaCreacion().isAfter(LocalDateTime.now().minusMinutes(5))) {
+        ultimoPagado.get().getFechaCreacion().isAfter(OffsetDateTime.now(ZoneId.of("America/Santiago")).minusMinutes(5))) {
         log.warn("⛔ Trigger bloqueado por pedido pagado reciente para {}", telefono);
         return ResponseEntity.ok().build();
     }
+
 
     // ⏳ Ignorar si ya hay un pedido en proceso en memoria
     if (pedidoContext.pedidoTemporalPorTelefono.containsKey(telefono)) {

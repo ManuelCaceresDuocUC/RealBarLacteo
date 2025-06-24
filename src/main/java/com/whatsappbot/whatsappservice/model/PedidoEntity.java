@@ -1,6 +1,7 @@
 package com.whatsappbot.whatsappservice.model;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -37,7 +38,7 @@ public class PedidoEntity {
     private String linkPago;
 
     @Column(name = "fecha_creacion", columnDefinition = "DATETIME")
-    private LocalDateTime fechaCreacion;
+private OffsetDateTime fechaCreacion;
 
     // 🟩 Nuevo campo para el local
     @Column(name = "local", length = 20)
@@ -56,7 +57,7 @@ public class PedidoEntity {
 
     @PrePersist
     protected void onCreate() {
-    this.fechaCreacion = LocalDateTime.now(java.time.ZoneId.of("America/Santiago"));
+    this.fechaCreacion = OffsetDateTime.now(ZoneId.of("America/Santiago"));
     }
 
     // Getters y Setters
@@ -127,15 +128,13 @@ public void setTokenWs(String tokenWs) {
     public void setLinkPago(String linkPago) {
         this.linkPago = linkPago;
     }
+public OffsetDateTime getFechaCreacion() {
+    return fechaCreacion;
+}
 
-    public LocalDateTime getFechaCreacion() {
-        return fechaCreacion;
-    }
-
-    public void setFechaCreacion(LocalDateTime fechaCreacion) {
-        this.fechaCreacion = fechaCreacion;
-    }
-
+public void setFechaCreacion(OffsetDateTime fechaCreacion) {
+    this.fechaCreacion = fechaCreacion;
+}
     // 🟩 Getter y Setter para el local
     public String getLocal() {
         return local;

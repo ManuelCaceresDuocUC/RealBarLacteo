@@ -3,7 +3,8 @@ package com.whatsappbot.whatsappservice.controller;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -49,7 +50,7 @@ public ResponseEntity<?> crearPedidoAutoservicio(@RequestBody PedidoRequestDTO r
         pedido.setEstado("pendiente");
         pedido.setMonto(request.getMonto());
         pedido.setPedidoId("pedido-" + UUID.randomUUID());
-        pedido.setFechaCreacion(LocalDateTime.now());
+pedido.setFechaCreacion(OffsetDateTime.now(ZoneId.of("America/Santiago")));
 
         pedidoRepository.save(pedido);
 
