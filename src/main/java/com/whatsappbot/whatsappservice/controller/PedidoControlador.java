@@ -166,4 +166,14 @@ public ResponseEntity<?> obtenerUltimoPedidoId() {
         .map(pedido -> ResponseEntity.ok(Map.of("pedidoId", pedido.getPedidoId())))
         .orElse(ResponseEntity.notFound().build());
 }
+@GetMapping
+public ResponseEntity<?> obtenerPedidosPorLocal(@RequestParam String local) {
+    try {
+        var pedidos = pedidoRepository.findByLocal(local);
+        return ResponseEntity.ok(pedidos);
+    } catch (Exception e) {
+        log.error("Error al obtener pedidos por local", e);
+        return ResponseEntity.status(500).body(Map.of("error", "Error interno"));
+    }
+}
 }
