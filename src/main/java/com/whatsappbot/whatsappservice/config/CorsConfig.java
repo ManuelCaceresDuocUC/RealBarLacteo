@@ -19,7 +19,7 @@ public class CorsConfig implements WebMvcConfigurer {
                 "http://localhost:3000", 
                 "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com"
             )
-            .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+            .allowedMethods("GET", "POST", "PUT", "DELETE","PATCH", "OPTIONS")
             .allowedHeaders("*")
             .allowCredentials(false);
     }
