@@ -18,7 +18,8 @@ public class CorsConfig implements WebMvcConfigurer {
             .allowedOrigins(
                 "http://localhost:3000", 
                 "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com",
-                "https://realbarlacteo-1.onrender.com" 
+                "https://realbarlacteo-1.onrender.com" ,
+                "https://fronted-autoservicio.vercel.app" // ✅ AGREGA ESTE
             )
             .allowedMethods("GET", "POST", "PUT", "DELETE","PATCH", "OPTIONS")
             .allowedHeaders("*")
