@@ -191,4 +191,20 @@ public ResponseEntity<?> actualizarEstado(@PathVariable Long id) {
         return ResponseEntity.ok(pedido);
     }).orElse(ResponseEntity.notFound().build());
 }
+@GetMapping("/ultimo-estado")
+public ResponseEntity<?> obtenerUltimoEstadoPedido(@RequestParam String telefono) {
+    Optional<PedidoEntity> pedido = pedidoRepository
+        .findTopByTelefonoOrderByFechaCreacionDesc(telefono);
+
+    if (pedido.isEmpty()) {
+        return ResponseEntity.notFound().build();
+    }
+
+    return ResponseEntity.ok(Map.of(
+        "estado", pedido.get().getEstado(),
+        "fecha", pedido.get().getFechaCreacion(),
+        "id", pedido.get().getId(),
+        "detalle", pedido.get().getDetalle()
+    ));
+}
 }
