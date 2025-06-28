@@ -62,17 +62,19 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
     pedido.setPedidoId(pedidoId);
     pedido.setTelefono(telefono);
     pedido.setDetalle(detalle);
-    pedido.setIndicaciones(null);
+
+    pedido.setIndicaciones(payload.get("indicaciones")); // 🟢 AQUÍ EL CAMBIO CLAVE
+
     pedido.setEstado("pendiente");
 
     double monto = Integer.parseInt(payload.get("monto"));
-    pedido.setMonto(monto); // ✅ ahora sí se setea
+    pedido.setMonto(monto);
 
     PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
     pedido.setLinkPago(pago.getUrl());
     pedido.setTokenWs(pago.getToken());
 
-    pedidoRepository.save(pedido); // ✅ solo una vez, al final
+    pedidoRepository.save(pedido);
 
     Map<String, Object> respuesta = new java.util.HashMap<>();
     respuesta.put("mensaje", "Pedido creado y link enviado por WhatsApp");
@@ -84,6 +86,7 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
     log.error("❌ Error al crear pedido", e);
     return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
 }
+
 }
 @RequestMapping(value = "/confirmacion", method = {RequestMethod.GET, RequestMethod.POST})
 public String confirmarPago(@RequestParam("token_ws") String token, Model model) {
