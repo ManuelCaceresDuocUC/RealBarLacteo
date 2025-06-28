@@ -59,16 +59,15 @@ public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
 
     try {
     PedidoEntity pedido = new PedidoEntity();
-    pedido.setPedidoId(pedidoId);
-    pedido.setTelefono(telefono);
-    pedido.setDetalle(detalle);
+pedido.setPedidoId(pedidoId);
+pedido.setTelefono(telefono);
+pedido.setDetalle(detalle);
+pedido.setIndicaciones(payload.get("indicaciones")); // ✅ Indicaciones desde frontend
+pedido.setLocal(payload.get("local"));               // ✅ Local desde frontend
+pedido.setEstado("pendiente");
 
-    pedido.setIndicaciones(payload.get("indicaciones")); // 🟢 AQUÍ EL CAMBIO CLAVE
-
-    pedido.setEstado("pendiente");
-
-    double monto = Integer.parseInt(payload.get("monto"));
-    pedido.setMonto(monto);
+double monto = Integer.parseInt(payload.get("monto"));
+pedido.setMonto(monto);
 
     PagoResponseDTO pago = transbankService.generarLinkDePago(pedidoId, monto);
     pedido.setLinkPago(pago.getUrl());
