@@ -130,9 +130,7 @@ public String confirmarPago(@RequestParam("token_ws") String token, Model model)
         log.info("✅ Pago confirmado para pedido {}", buyOrder);
 
         // 📦 Agregar datos al modelo para mostrar en HTML
-        model.addAttribute("pedido", pedido);
-        model.addAttribute("urlComanda", urlComanda);
-        return "confirmacion";
+       return "redirect:" + urlComanda;
 
     } catch (Exception e) {
         log.error("❌ Error interno al confirmar pago", e);
