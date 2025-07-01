@@ -207,4 +207,13 @@ public ResponseEntity<?> obtenerUltimoEstadoPedido(@RequestParam String telefono
         "detalle", pedido.get().getDetalle()
     ));
 }
+@GetMapping("/telefono")
+public ResponseEntity<?> obtenerPedidosPorTelefono(@RequestParam String numero) {
+    try {
+        return ResponseEntity.ok(pedidoRepository.findByTelefono(numero));
+    } catch (Exception e) {
+        log.error("❌ Error al obtener historial del cliente", e);
+        return ResponseEntity.status(500).body(Map.of("error", "Error al buscar pedidos"));
+    }
+}
 }

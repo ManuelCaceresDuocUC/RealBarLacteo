@@ -31,5 +31,6 @@ PedidoEntity findByTokenWs(String tokenWs);
 
 Optional<PedidoEntity> findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(String telefono, String estado);
 List<PedidoEntity> findByLocal(String local);
+List<PedidoEntity> findByTelefono(String telefono);
 
 }
