@@ -216,4 +216,13 @@ public ResponseEntity<?> obtenerPedidosPorTelefono(@RequestParam String numero) 
         return ResponseEntity.status(500).body(Map.of("error", "Error al buscar pedidos"));
     }
 }
+@GetMapping("/ultimo-estado")
+public ResponseEntity<?> obtenerUltimoEstadoPorTelefono(@RequestParam String telefono) {
+    return pedidoRepository.findTopByTelefonoOrderByFechaCreacionDesc(telefono)
+        .map(pedido -> ResponseEntity.ok(Map.of(
+            "estado", pedido.getEstado(),
+            "pedidoId", pedido.getPedidoId()
+        )))
+        .orElse(ResponseEntity.notFound().build());
+}
 }
