@@ -20,6 +20,8 @@ public class CorsConfig implements WebMvcConfigurer {
                 "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com",
                 "https://realbarlacteo-1.onrender.com" ,
                 "https://fronted-autoservicio.vercel.app",
+                "https://panel-local.vercel.app",
+
                     "https://fronted-autoservicio-krfmxq7zg-manuel-caceres-projects.vercel.app" // ✅ AGREGA ESTA
  // ✅ AGREGA ESTE
             )
