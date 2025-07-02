@@ -37,6 +37,8 @@ public class ComandaService {
 
         Font bold = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10);
         Font normal = FontFactory.getFont(FontFactory.HELVETICA, 9);
+        Font detalleTitulo = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14);
+        Font detalleContenido = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13);
 
         DecimalFormat df = new DecimalFormat("#,##0");
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
@@ -51,8 +53,10 @@ public class ComandaService {
         documento.add(new Paragraph("Cliente: " + pedido.getTelefono(), normal));
         documento.add(new Paragraph("==============================", bold));
 
-        documento.add(new Paragraph("DETALLE DEL PEDIDO", bold));
-        documento.add(new Paragraph(pedido.getDetalle(), normal));
+        documento.add(new Paragraph(" ", normal));
+        documento.add(new Paragraph("##DETALLE DEL PEDIDO##", detalleTitulo));
+        documento.add(new Paragraph(pedido.getDetalle(), detalleContenido));
+        documento.add(new Paragraph(" ", normal));
         documento.add(new Paragraph("--------------------------------", normal));
 
         if (pedido.getIndicaciones() != null && !pedido.getIndicaciones().isBlank()) {
@@ -69,7 +73,6 @@ public class ComandaService {
 
         InputStream input = new ByteArrayInputStream(baos.toByteArray());
 
-        // 🟩 Lógica de subcarpeta según local
         String local = (pedido.getLocal() != null) ? pedido.getLocal().toUpperCase() : "SIN_LOCAL";
         String nombreArchivo = local + "/COMANDA_" + pedido.getPedidoId() + ".pdf";
 
