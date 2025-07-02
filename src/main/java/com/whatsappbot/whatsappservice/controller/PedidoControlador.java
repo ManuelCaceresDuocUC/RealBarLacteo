@@ -185,12 +185,14 @@ public ResponseEntity<?> actualizarEstado(@PathVariable Long id) {
         switch (actual) {
             case "pagado" -> pedido.setEstado("en preparación");
             case "en preparación" -> pedido.setEstado("listo");
-            default -> pedido.setEstado(actual);
+            case "listo" -> pedido.setEstado("entregado");
+            default -> pedido.setEstado(actual); // mantiene el mismo estado
         }
         pedidoRepository.save(pedido);
         return ResponseEntity.ok(pedido);
     }).orElse(ResponseEntity.notFound().build());
 }
+
 @GetMapping("/ultimo-estado")
 public ResponseEntity<?> obtenerUltimoEstadoPedido(@RequestParam String telefono) {
     Optional<PedidoEntity> pedido = pedidoRepository
