@@ -4,6 +4,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.text.DecimalFormat;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 import org.springframework.stereotype.Service;
@@ -49,8 +51,10 @@ public class ComandaService {
         documento.add(new Paragraph("RUT: 76.262.419-2", normal));
         documento.add(new Paragraph("Teléfono local: 983947568", normal));
         documento.add(new Paragraph("Estado del pedido: PAGADO", normal));
-        documento.add(new Paragraph("Fecha: " + pedido.getFechaCreacion().format(formatter), normal));
-        documento.add(new Paragraph("Cliente: " + pedido.getTelefono(), normal));
+        ZonedDateTime zoned = pedido.getFechaCreacion()
+            .toInstant()
+            .atZone(ZoneId.of("America/Santiago"));
+        documento.add(new Paragraph("Fecha: " + zoned.format(formatter), normal));        documento.add(new Paragraph("Cliente: " + pedido.getTelefono(), normal));
         documento.add(new Paragraph("==============================", bold));
 
         documento.add(new Paragraph(" ", normal));
