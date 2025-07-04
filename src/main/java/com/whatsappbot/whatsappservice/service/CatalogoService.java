@@ -17,7 +17,7 @@ public class CatalogoService {
         List<ProductoCatalogo> productos = new ArrayList<>();
 
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(getClass().getResourceAsStream("/catalogo_barlacteo_ubicacion_ok.csv"),
+                new InputStreamReader(getClass().getResourceAsStream("/catalogo_fronted.csv"),
                         StandardCharsets.UTF_8))) {
 
             String linea;
