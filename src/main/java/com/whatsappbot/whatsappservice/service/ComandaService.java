@@ -59,7 +59,16 @@ public class ComandaService {
 
         documento.add(new Paragraph(" ", normal));
         documento.add(new Paragraph("##DETALLE DEL PEDIDO##", detalleTitulo));
-        documento.add(new Paragraph(pedido.getDetalle(), detalleContenido));
+
+        // Separar el detalle por salto de línea, coma u otro separador que uses
+        String[] items = pedido.getDetalle().split("\\r?\\n|,|;");
+
+        for (String item : items) {
+            String linea = item.trim();
+            if (!linea.isEmpty()) {
+                documento.add(new Paragraph("• " + linea, detalleContenido));
+            }
+        }
         documento.add(new Paragraph(" ", normal));
         documento.add(new Paragraph("--------------------------------", normal));
 
