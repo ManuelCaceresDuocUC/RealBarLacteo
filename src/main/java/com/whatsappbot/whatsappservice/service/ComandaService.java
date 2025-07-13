@@ -46,7 +46,7 @@ public class ComandaService {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
         documento.add(new Paragraph("==============================", bold));
-        documento.add(new Paragraph("Bartolo Apolinav", bold));
+        documento.add(new Paragraph("⚓ Bartolo Apolinav ⚓", bold));
         documento.add(new Paragraph("Jorge Montt s/n, Viña del Mar", normal));
         documento.add(new Paragraph("RUT: 76.262.419-2", normal));
         documento.add(new Paragraph("Teléfono local: 983947568", normal));

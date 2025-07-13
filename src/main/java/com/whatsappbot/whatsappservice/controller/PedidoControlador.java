@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -226,5 +227,21 @@ public ResponseEntity<?> obtenerUltimoEstadoPorTelefono(@RequestParam String tel
             "pedidoId", pedido.getPedidoId()
         )))
         .orElse(ResponseEntity.notFound().build());
+}
+@PutMapping("/{id}/estado-manual")
+public ResponseEntity<?> cambiarEstadoManual(@PathVariable Long id, @RequestBody Map<String, String> payload) {
+    String nuevoEstado = payload.get("estado");
+    if (nuevoEstado == null || nuevoEstado.isBlank()) {
+        return ResponseEntity.badRequest().body(Map.of("error", "Debe proporcionar un estado válido"));
+    }
+
+    return pedidoRepository.findById(id).map(pedido -> {
+        pedido.setEstado(nuevoEstado);
+        pedidoRepository.save(pedido);
+        return ResponseEntity.ok(Map.of(
+            "mensaje", "Estado actualizado manualmente",
+            "nuevoEstado", nuevoEstado
+        ));
+    }).orElse(ResponseEntity.notFound().build());
 }
 }
