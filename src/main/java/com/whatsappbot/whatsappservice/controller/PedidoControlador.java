@@ -104,8 +104,19 @@ public String confirmarPago(@RequestParam("token_ws") String token, Model model)
         PedidoEntity pedido = pedidoOpt.get();
 
         // ✅ Actualizar estado
-        pedido.setEstado("pagado");
-        pedidoRepository.save(pedido);
+   if ("AUTHORIZED".equals(response.getStatus())) {
+    pedido.setEstado("pagado");
+    pedidoRepository.save(pedido);
+
+    // 🧾 Generar comanda SOLO si fue pagado
+    String urlComanda = comandaService.generarPDF(pedido);
+    System.out.println("🔗 URL comanda generada: " + urlComanda);
+    // ...
+} else {
+    log.warn("⚠️ Transacción NO autorizada para token {}", token);
+    model.addAttribute("mensaje", "El pago no fue autorizado.");
+    return "error";
+}
 
         // ✅ Volver a cargar para asegurar que tenga todos los datos actualizados
         pedido = pedidoRepository.findByPedidoId(buyOrder).orElseThrow();
