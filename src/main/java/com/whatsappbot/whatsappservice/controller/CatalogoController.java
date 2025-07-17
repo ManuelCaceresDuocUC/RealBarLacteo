@@ -67,7 +67,9 @@ public ResponseEntity<List<ProductoDTO>> obtenerCatalogo() {
                             nombre,
                             linea[1].trim(), // descripción
                             linea[2].trim(), // precio
-                            linea[3].trim()  // imagen
+                            linea[3].trim(),  // imagen
+                            linea[4].trim()  // ✅ categoría
+
                         );
                         productos.add(producto);
                     }
@@ -91,6 +93,8 @@ public ResponseEntity<List<ProductoDTO>> obtenerCatalogo() {
         private String descripcion;
         private String precio;
         private String imagen;
+        private String categoria; // ✅ nuevo campo
+
     }
     @Data
     public class PedidoRequestDTO {
