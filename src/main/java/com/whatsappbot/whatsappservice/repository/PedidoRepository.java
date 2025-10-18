@@ -25,12 +25,12 @@ public interface PedidoRepository extends JpaRepository<PedidoEntity, Long> {
     Optional<PedidoEntity> findByTelefonoAndEstado(String telefono, String estado);
     @Query("SELECT p FROM PedidoEntity p WHERE p.estado = 'pagado' ORDER BY p.fechaCreacion DESC")
     Optional<PedidoEntity> findUltimoPedidoPagado();
-Optional<PedidoEntity> findTopByTelefonoOrderByFechaCreacionDesc(String telefono);
-List<PedidoEntity> findByEstadoAndFechaCreacionBefore(String estado, OffsetDateTime  fechaCreacion);
-PedidoEntity findByTokenWs(String tokenWs);
+    Optional<PedidoEntity> findTopByTelefonoOrderByFechaCreacionDesc(String telefono);
+    List<PedidoEntity> findByEstadoAndFechaCreacionBefore(String estado, OffsetDateTime  fechaCreacion);
+    PedidoEntity findByTokenWs(String tokenWs);
 
-Optional<PedidoEntity> findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(String telefono, String estado);
-List<PedidoEntity> findByLocal(String local);
-List<PedidoEntity> findByTelefono(String telefono);
+    Optional<PedidoEntity> findTopByTelefonoAndEstadoOrderByFechaCreacionDesc(String telefono, String estado);
+    List<PedidoEntity> findByLocal(String local);
+    List<PedidoEntity> findByTelefono(String telefono);
 
 }

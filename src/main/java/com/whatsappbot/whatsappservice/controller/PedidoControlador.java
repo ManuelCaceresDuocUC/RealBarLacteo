@@ -1,5 +1,4 @@
 package com.whatsappbot.whatsappservice.controller;
-
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,21 +27,18 @@ import com.whatsappbot.whatsappservice.service.WatiService;
 import cl.transbank.webpay.webpayplus.responses.WebpayPlusTransactionCommitResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 @Slf4j
 @Controller
-
 @RequestMapping("/api/pedidos")
 @RequiredArgsConstructor
 public class PedidoControlador {
 
-    private final PedidoRepository pedidoRepository;
-    private final TransbankService transbankService;
-    private final WatiService watiService;
-    private final ComandaService comandaService;
-    private final PedidoContextService pedidoContext;
-
-    @PostMapping
+private final PedidoRepository pedidoRepository;
+private final TransbankService transbankService;
+private final WatiService watiService;
+private final ComandaService comandaService;
+private final PedidoContextService pedidoContext;
+@PostMapping
 public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
     String telefono = payload.get("telefono");
     String detalle = payload.get("detalle");
@@ -104,7 +100,7 @@ public String confirmarPago(@RequestParam("token_ws") String token, Model model)
         PedidoEntity pedido = pedidoOpt.get();
 
         // ✅ Actualizar estado
-   if ("AUTHORIZED".equals(response.getStatus())) {
+    if ("AUTHORIZED".equals(response.getStatus())) {
     pedido.setEstado("pagado");
     pedidoRepository.save(pedido);
 
@@ -112,37 +108,37 @@ public String confirmarPago(@RequestParam("token_ws") String token, Model model)
     String urlComanda = comandaService.generarPDF(pedido);
     System.out.println("🔗 URL comanda generada: " + urlComanda);
     // ...
-} else {
+    } else {
     log.warn("⚠️ Transacción NO autorizada para token {}", token);
     model.addAttribute("mensaje", "El pago no fue autorizado.");
     return "error";
-}
+    }
 
-        // ✅ Volver a cargar para asegurar que tenga todos los datos actualizados
-        pedido = pedidoRepository.findByPedidoId(buyOrder).orElseThrow();
+    // ✅ Volver a cargar para asegurar que tenga todos los datos actualizados
+    pedido = pedidoRepository.findByPedidoId(buyOrder).orElseThrow();
 
-        // 🧾 Generar PDF
-        String urlComanda = comandaService.generarPDF(pedido);
-        System.out.println("🔗 URL comanda generada: " + urlComanda);
-        System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
+    // 🧾 Generar PDF
+    String urlComanda = comandaService.generarPDF(pedido);
+    System.out.println("🔗 URL comanda generada: " + urlComanda);
+    System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
 
-        // ✅ Enviar mensaje por WhatsApp
-        if (urlComanda != null) {
+    // ✅ Enviar mensaje por WhatsApp
+    if (urlComanda != null) {
             watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
-        } else {
-            log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
-            watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
+    } else {
+        log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
+        watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
         }
 
-        // 🧹 Limpiar datos temporales
-        pedidoContext.pedidoTemporalPorTelefono.remove(pedido.getTelefono());
-        pedidoContext.indicacionPreguntadaPorTelefono.remove(pedido.getTelefono());
-        pedidoContext.ultimoMensajeProcesadoPorNumero.remove(pedido.getTelefono());
+    // 🧹 Limpiar datos temporales
+    pedidoContext.pedidoTemporalPorTelefono.remove(pedido.getTelefono());
+    pedidoContext.indicacionPreguntadaPorTelefono.remove(pedido.getTelefono());
+    pedidoContext.ultimoMensajeProcesadoPorNumero.remove(pedido.getTelefono());
 
-        log.info("✅ Pago confirmado para pedido {}", buyOrder);
+    log.info("✅ Pago confirmado para pedido {}", buyOrder);
 
-        // 📦 Agregar datos al modelo para mostrar en HTML
-       return "redirect:" + urlComanda;
+     // 📦 Agregar datos al modelo para mostrar en HTML
+    return "redirect:" + urlComanda;
 
     } catch (Exception e) {
         log.error("❌ Error interno al confirmar pago", e);
@@ -153,27 +149,6 @@ public String confirmarPago(@RequestParam("token_ws") String token, Model model)
 
 
 
-/*@GetMapping("/webpay-redireccion")
-public ResponseEntity<String> redirigirAWebpay(@RequestParam("token_ws") String token) {
-    String html = """
-        <html>
-        <head><title>Redireccionando a WebPay...</title></head>
-        <body onload="document.forms[0].submit()">
-            <form method="POST" action="https://webpay3gint.transbank.cl/webpayserver/initTransaction">
-                <input type="hidden" name="token_ws" value="%s" />
-                <noscript>
-                    <p>Tu navegador no soporta redirección automática. Haz clic en el botón.</p>
-                    <button type="submit">Ir a WebPay</button>
-                </noscript>
-            </form>
-        </body>
-        </html>
-        """.formatted(token);
-
-    return ResponseEntity.ok()
-            .header("Content-Type", "text/html")
-            .body(html);
-}*/
 @GetMapping("/api/ultimo-pedido-id")
 public ResponseEntity<?> obtenerUltimoPedidoId() {
     return pedidoRepository.findUltimoPedidoPagado()
