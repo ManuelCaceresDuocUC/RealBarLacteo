@@ -3,13 +3,8 @@ package com.whatsappbot.whatsappservice.model;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "pedidos")
@@ -19,7 +14,9 @@ public class PedidoEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)               // opcional: @Column(unique = true)
     private String pedidoId;
+
     private String telefono;
 
     @Column(columnDefinition = "TEXT")
@@ -31,20 +28,24 @@ public class PedidoEntity {
     @Column(length = 20)
     private String estado;
 
-    @Column(name = "monto")
+    @Column(name = "monto", nullable = false)
     private double monto;
 
     @Column(name = "link_pago", columnDefinition = "TEXT")
     private String linkPago;
 
-    @Column(name = "fecha_creacion", columnDefinition = "DATETIME")
-private OffsetDateTime fechaCreacion;
+    // MySQL/MariaDB: usa TIMESTAMP (sin TZ). Quita columnDefinition para portabilidad.
+    // Si quieres fijarlo: @Column(name="fecha_creacion", columnDefinition="TIMESTAMP")
+    @Column(name = "fecha_creacion", nullable = false)
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ssXXX") // ej: 2025-10-19T14:22:00-03:00
+    private OffsetDateTime fechaCreacion;
 
-    // 🟩 Nuevo campo para el local
     @Column(name = "local", length = 20)
     private String local;
+
     @Column(name = "token_ws")
     private String tokenWs;
+
     public PedidoEntity() {}
 
     public PedidoEntity(String pedidoId, String telefono, String detalle, String indicaciones) {
@@ -57,90 +58,42 @@ private OffsetDateTime fechaCreacion;
 
     @PrePersist
     protected void onCreate() {
-    this.fechaCreacion = OffsetDateTime.now(ZoneId.of("America/Santiago"));
+        if (this.fechaCreacion == null) {
+            this.fechaCreacion = OffsetDateTime.now(ZoneId.of("America/Santiago"));
+        }
     }
 
-    // Getters y Setters
+    /* ================= Getters/Setters ================ */
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
 
-    public String getPedidoId() {
-        return pedidoId;
-    }
+    public String getPedidoId() { return pedidoId; }
+    public void setPedidoId(String pedidoId) { this.pedidoId = pedidoId; }
 
-    public void setPedidoId(String pedidoId) {
-        this.pedidoId = pedidoId;
-    }
+    public String getTelefono() { return telefono; }
+    public void setTelefono(String telefono) { this.telefono = telefono; }
 
-    public String getTelefono() {
-        return telefono;
-    }
+    public String getDetalle() { return detalle; }
+    public void setDetalle(String detalle) { this.detalle = detalle; }
 
-    public void setTelefono(String telefono) {
-        this.telefono = telefono;
-    }
+    public String getIndicaciones() { return indicaciones; }
+    public void setIndicaciones(String indicaciones) { this.indicaciones = indicaciones; }
 
-    public String getDetalle() {
-        return detalle;
-    }
+    public String getEstado() { return estado; }
+    public void setEstado(String estado) { this.estado = estado; }
 
-    public void setDetalle(String detalle) {
-        this.detalle = detalle;
-    }
-    public String getTokenWs() {
-    return tokenWs;
-}
+    public double getMonto() { return monto; }
+    public void setMonto(double monto) { this.monto = monto; } // usa primitivo para evitar NPE
 
-public void setTokenWs(String tokenWs) {
-    this.tokenWs = tokenWs;
-}
+    public String getLinkPago() { return linkPago; }
+    public void setLinkPago(String linkPago) { this.linkPago = linkPago; }
 
-    public String getIndicaciones() {
-        return indicaciones;
-    }
+    public OffsetDateTime getFechaCreacion() { return fechaCreacion; }
+    public void setFechaCreacion(OffsetDateTime fechaCreacion) { this.fechaCreacion = fechaCreacion; }
 
-    public void setIndicaciones(String indicaciones) {
-        this.indicaciones = indicaciones;
-    }
+    public String getLocal() { return local; }
+    public void setLocal(String local) { this.local = local; }
 
-    public String getEstado() {
-        return estado;
-    }
-
-    public void setEstado(String estado) {
-        this.estado = estado;
-    }
-
-    public double getMonto() {
-        return monto;
-    }
-
-    public void setMonto(Double monto) {
-        this.monto = monto;
-    }
-
-    public String getLinkPago() {
-        return linkPago;
-    }
-
-    public void setLinkPago(String linkPago) {
-        this.linkPago = linkPago;
-    }
-public OffsetDateTime getFechaCreacion() {
-    return fechaCreacion;
-}
-
-public void setFechaCreacion(OffsetDateTime fechaCreacion) {
-    this.fechaCreacion = fechaCreacion;
-}
-    // 🟩 Getter y Setter para el local
-    public String getLocal() {
-        return local;
-    }
-
-    public void setLocal(String local) {
-        this.local = local;
-    }
+    public String getTokenWs() { return tokenWs; }
+    public void setTokenWs(String tokenWs) { this.tokenWs = tokenWs; }
 }
