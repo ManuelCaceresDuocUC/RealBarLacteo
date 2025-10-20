@@ -3,6 +3,9 @@ package com.whatsappbot.whatsappservice.controller;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.LinkedHashMap;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
@@ -16,6 +19,7 @@ import com.whatsappbot.whatsappservice.service.ComandaService;
 import com.whatsappbot.whatsappservice.service.PedidoContextService;
 import com.whatsappbot.whatsappservice.service.TransbankService;
 import com.whatsappbot.whatsappservice.service.WatiService;
+import com.whatsappbot.whatsappservice.service.StockService;
 
 import cl.transbank.webpay.webpayplus.responses.WebpayPlusTransactionCommitResponse;
 import lombok.RequiredArgsConstructor;
@@ -32,19 +36,18 @@ public class PedidoControlador {
     private final WatiService watiService;
     private final ComandaService comandaService;
     private final PedidoContextService pedidoContext;
+    private final StockService stockService; // nuevo
 
     @PostMapping
     public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
         String telefono = payload.get("telefono");
         String detalle = payload.get("detalle");
-
         if (telefono == null || telefono.isBlank() || detalle == null || detalle.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Faltan datos obligatorios"));
         }
 
         String pedidoId = "pedido-" + UUID.randomUUID().toString().substring(0, 8);
         log.info("📝 Recibido nuevo pedido: telefono={}, detalle={}", telefono, detalle);
-
         if (!telefono.startsWith("+")) telefono = "+" + telefono;
 
         try {
@@ -65,12 +68,11 @@ public class PedidoControlador {
 
             pedidoRepository.save(pedido);
 
-            Map<String, Object> respuesta = new java.util.HashMap<>();
-            respuesta.put("mensaje", "Pedido creado y link enviado por WhatsApp");
-            respuesta.put("pedidoId", pedidoId);
-            respuesta.put("linkPago", pago.getUrl());
-
-            return ResponseEntity.ok(respuesta);
+            return ResponseEntity.ok(Map.of(
+                "mensaje", "Pedido creado y link enviado por WhatsApp",
+                "pedidoId", pedidoId,
+                "linkPago", pago.getUrl()
+            ));
         } catch (Exception e) {
             log.error("❌ Error al crear pedido", e);
             return ResponseEntity.status(500).body(Map.of("error", "No se pudo procesar el pedido"));
@@ -91,23 +93,24 @@ public class PedidoControlador {
 
             PedidoEntity pedido = pedidoOpt.get();
 
-            if ("AUTHORIZED".equals(response.getStatus())) {
-                pedido.setEstado("pagado");
-                pedidoRepository.save(pedido);
-
-                String urlComanda = comandaService.generarPDF(pedido);
-                System.out.println("🔗 URL comanda generada: " + urlComanda);
-            } else {
+            if (!"AUTHORIZED".equals(response.getStatus())) {
                 log.warn("⚠️ Transacción NO autorizada para token {}", token);
                 model.addAttribute("mensaje", "El pago no fue autorizado.");
                 return "error";
             }
 
-            pedido = pedidoRepository.findByPedidoId(buyOrder).orElseThrow();
+            // Idempotencia: no descontar dos veces ni regenerar si ya está pagado
+            if (!"pagado".equalsIgnoreCase(pedido.getEstado())) {
+                var items = parseItems(pedido.getDetalle());
+                for (var e : items.entrySet()) {
+                    stockService.disminuirPorCompra(e.getKey(), e.getValue());
+                }
+                pedido.setEstado("pagado");
+                pedidoRepository.save(pedido);
+            }
 
             String urlComanda = comandaService.generarPDF(pedido);
-            System.out.println("🔗 URL comanda generada: " + urlComanda);
-            System.out.println("📞 Enviando mensaje de confirmación a: " + pedido.getTelefono());
+            log.info("🔗 URL comanda generada: {}", urlComanda);
 
             if (urlComanda != null) {
                 watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
@@ -121,8 +124,15 @@ public class PedidoControlador {
             pedidoContext.ultimoMensajeProcesadoPorNumero.remove(pedido.getTelefono());
 
             log.info("✅ Pago confirmado para pedido {}", buyOrder);
-            return "redirect:" + urlComanda;
-
+            return "redirect:" + (urlComanda != null ? urlComanda : "/");
+        } catch (org.springframework.dao.OptimisticLockingFailureException e) {
+            log.error("⚠️ Colisión de stock. Otro pedido tomó el stock primero.", e);
+            model.addAttribute("mensaje", "Stock agotado durante el proceso.");
+            return "error";
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            log.error("❌ Stock insuficiente o producto inválido.", e);
+            model.addAttribute("mensaje", e.getMessage());
+            return "error";
         } catch (Exception e) {
             log.error("❌ Error interno al confirmar pago", e);
             model.addAttribute("mensaje", "Ocurrió un error al confirmar el pago.");
@@ -130,21 +140,49 @@ public class PedidoControlador {
         }
     }
 
-    // FIX: antes tenías "/api/ultimo-pedido-id" y quedaba doble prefijo
+    // === util: parseo de items desde detalle ===
+    private Map<String, Integer> parseItems(String detalle) {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        if (detalle == null || detalle.isBlank()) return map;
+        String[] lines = detalle.split("\\r?\\n");
+        Pattern[] patterns = new Pattern[] {
+            Pattern.compile("^(\\d+)\\s*[xX]\\s*(.+)$"),          // "2 x Nombre"
+            Pattern.compile("^(.+?)\\s*[xX]\\s*(\\d+)$"),         // "Nombre x 2"
+            Pattern.compile("^(.+?)\\s*\\((\\d+)\\)$"),           // "Nombre (2)"
+            Pattern.compile("^-?\\s*(.+?)\\s*[:=]\\s*(\\d+)$")    // "- Nombre: 2"
+        };
+        for (String raw : lines) {
+            String s = raw.trim();
+            if (s.isEmpty()) continue;
+            boolean matched = false;
+            for (Pattern p : patterns) {
+                Matcher m = p.matcher(s);
+                if (m.find()) {
+                    String name = (p.pattern().startsWith("^(")) ? m.group(2).trim() : m.group(1).trim();
+                    int qty = Integer.parseInt((p.pattern().startsWith("^(")) ? m.group(1) : m.group(2));
+                    map.merge(name, qty, Integer::sum);
+                    matched = true; break;
+                }
+            }
+            if (!matched) map.merge(s, 1, Integer::sum);
+        }
+        return map;
+    }
+
+    // ===== Resto de endpoints existentes =====
+
     @GetMapping("/ultimo-pedido-id")
-public ResponseEntity<?> obtenerUltimoPedidoId() {
-    return pedidoRepository
-        .findTopByEstadoOrderByFechaCreacionDesc("pagado")
-        .map(p -> ResponseEntity.ok(Map.of("pedidoId", p.getPedidoId())))
-        .orElse(ResponseEntity.notFound().build());
-}
+    public ResponseEntity<?> obtenerUltimoPedidoId() {
+        return pedidoRepository
+            .findTopByEstadoOrderByFechaCreacionDesc("pagado")
+            .map(p -> ResponseEntity.ok(Map.of("pedidoId", p.getPedidoId())))
+            .orElse(ResponseEntity.notFound().build());
+    }
 
     @GetMapping
     public ResponseEntity<?> obtenerPedidosPorLocal(@RequestParam String local) {
-        try {
-            var pedidos = pedidoRepository.findByLocal(local);
-            return ResponseEntity.ok(pedidos);
-        } catch (Exception e) {
+        try { return ResponseEntity.ok(pedidoRepository.findByLocal(local)); }
+        catch (Exception e) {
             log.error("Error al obtener pedidos por local", e);
             return ResponseEntity.status(500).body(Map.of("error", "Error interno"));
         }
@@ -167,24 +205,20 @@ public ResponseEntity<?> obtenerUltimoPedidoId() {
 
     @GetMapping("/ultimo-estado")
     public ResponseEntity<?> obtenerUltimoEstadoPedido(@RequestParam String telefono) {
-        Optional<PedidoEntity> pedido = pedidoRepository
-                .findTopByTelefonoOrderByFechaCreacionDesc(telefono);
-
+        Optional<PedidoEntity> pedido = pedidoRepository.findTopByTelefonoOrderByFechaCreacionDesc(telefono);
         if (pedido.isEmpty()) return ResponseEntity.notFound().build();
-
         return ResponseEntity.ok(Map.of(
-                "estado", pedido.get().getEstado(),
-                "fecha", pedido.get().getFechaCreacion(),
-                "id", pedido.get().getId(),
-                "detalle", pedido.get().getDetalle()
+            "estado", pedido.get().getEstado(),
+            "fecha", pedido.get().getFechaCreacion(),
+            "id", pedido.get().getId(),
+            "detalle", pedido.get().getDetalle()
         ));
     }
 
     @GetMapping("/telefono")
     public ResponseEntity<?> obtenerPedidosPorTelefono(@RequestParam String numero) {
-        try {
-            return ResponseEntity.ok(pedidoRepository.findByTelefono(numero));
-        } catch (Exception e) {
+        try { return ResponseEntity.ok(pedidoRepository.findByTelefono(numero)); }
+        catch (Exception e) {
             log.error("❌ Error al obtener historial del cliente", e);
             return ResponseEntity.status(500).body(Map.of("error", "Error al buscar pedidos"));
         }
@@ -193,11 +227,11 @@ public ResponseEntity<?> obtenerUltimoPedidoId() {
     @GetMapping("/estado-actual")
     public ResponseEntity<?> obtenerUltimoEstadoPorTelefono(@RequestParam String telefono) {
         return pedidoRepository.findTopByTelefonoOrderByFechaCreacionDesc(telefono)
-                .map(pedido -> ResponseEntity.ok(Map.of(
-                        "estado", pedido.getEstado(),
-                        "pedidoId", pedido.getPedidoId()
-                )))
-                .orElse(ResponseEntity.notFound().build());
+            .map(pedido -> ResponseEntity.ok(Map.of(
+                "estado", pedido.getEstado(),
+                "pedidoId", pedido.getPedidoId()
+            )))
+            .orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}/estado-manual")
@@ -206,30 +240,23 @@ public ResponseEntity<?> obtenerUltimoPedidoId() {
         if (nuevoEstado == null || nuevoEstado.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Debe proporcionar un estado válido"));
         }
-
         return pedidoRepository.findById(id).map(pedido -> {
             pedido.setEstado(nuevoEstado);
             pedidoRepository.save(pedido);
-            return ResponseEntity.ok(Map.of(
-                    "mensaje", "Estado actualizado manualmente",
-                    "nuevoEstado", nuevoEstado
-            ));
+            return ResponseEntity.ok(Map.of("mensaje", "Estado actualizado manualmente", "nuevoEstado", nuevoEstado));
         }).orElse(ResponseEntity.notFound().build());
     }
 
-    // === NUEVO: Hard delete por ID
     @DeleteMapping("/{id}")
-public ResponseEntity<Void> eliminarPorId(@PathVariable Long id) {
-    if (!pedidoRepository.existsById(id)) return ResponseEntity.notFound().build();
-    pedidoRepository.deleteById(id);
-    return ResponseEntity.noContent().build();
-}
+    public ResponseEntity<Void> eliminarPorId(@PathVariable Long id) {
+        if (!pedidoRepository.existsById(id)) return ResponseEntity.notFound().build();
+        pedidoRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
 
-    // === NUEVO: Hard delete por pedidoId (UUID tipo "pedido-xxxx")
     @DeleteMapping("/by-pedido-id/{pedidoId}")
-public ResponseEntity<Void> eliminarPorPedidoId(@PathVariable String pedidoId) {
-    long n = pedidoRepository.deleteByPedidoId(pedidoId);
-    return (n > 0) ? ResponseEntity.noContent().build()
-                   : ResponseEntity.notFound().build();
-}
+    public ResponseEntity<Void> eliminarPorPedidoId(@PathVariable String pedidoId) {
+        long n = pedidoRepository.deleteByPedidoId(pedidoId);
+        return (n > 0) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+    }
 }
