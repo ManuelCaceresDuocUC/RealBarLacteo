@@ -7,8 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
@@ -28,62 +27,61 @@ import lombok.extern.slf4j.Slf4j;
 @RestController
 @Slf4j
 @RequiredArgsConstructor
-
+@CrossOrigin(origins = {"https://realbarlacteo-1.onrender.com", "http://localhost:3000"})
 public class CatalogoController {
-private final PedidoRepository pedidoRepository;
-private final TransbankService transbankService; 
-private final ProductoStockRepository productoStockRepository;
 
-   private static final String CSV_URL = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/catalogo_fronted.csv";
-@GetMapping("/api/catalogo")
-public ResponseEntity<List<ProductoDTO>> obtenerCatalogo() {
-    List<ProductoDTO> productos = new ArrayList<>();
+    private final PedidoRepository pedidoRepository;
+    private final TransbankService transbankService;
+    private final ProductoStockRepository productoStockRepository;
 
-    try {
-        URL url = new URL(CSV_URL);
-        CSVParser parser = new CSVParserBuilder()
-                .withSeparator(';') // Usa punto y coma como separador
-                .build();
+    private static final String CSV_URL = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/catalogo_fronted.csv";
 
-        try (CSVReader csvReader = new CSVReaderBuilder(
-                new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))
-                .withCSVParser(parser)
-                .withSkipLines(1)
-                .build()) {
+    @GetMapping("/api/catalogo")
+    public ResponseEntity<List<ProductoDTO>> obtenerCatalogo() {
+        List<ProductoDTO> productos = new ArrayList<>();
 
-            String[] linea;
-            while ((linea = csvReader.readNext()) != null) {
-                if (linea.length >= 4) {
-                    String nombre = linea[0].trim();
+        try {
+            URL url = new URL(CSV_URL);
+            CSVParser parser = new CSVParserBuilder().withSeparator(';').build();
 
-                    // Verifica si está en la base de datos y disponible
-                    boolean disponible = productoStockRepository
-                        .findByNombreIgnoreCase(nombre)
-    .map(ProductoStockEntity::getDisponible) // <- usar getDisponible en lugar de isDisponible
-                        .orElse(false);
+            try (CSVReader csvReader = new CSVReaderBuilder(
+                    new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))
+                    .withCSVParser(parser)
+                    .withSkipLines(1) // salta encabezado
+                    .build()) {
 
-                    if (disponible) {
-                        ProductoDTO producto = new ProductoDTO(
-                            nombre,
-                            linea[1].trim(), // descripción
-                            linea[2].trim(), // precio
-                            linea[3].trim(),  // imagen
-                            linea[4].trim()  // ✅ categoría
+                String[] linea;
+                while ((linea = csvReader.readNext()) != null) {
+                    // nombre;descripcion;precio;imagen;categoria (mínimo 5)
+                    if (linea.length >= 5) {
+                        String nombre = linea[0].trim();
 
-                        );
-                        productos.add(producto);
+                        // visible solo si está disponible y con stock>0
+                        boolean visible = productoStockRepository
+                                .findByNombreIgnoreCase(nombre)
+                                .map(p -> Boolean.TRUE.equals(p.getDisponible())
+                                        && p.getStock() != null
+                                        && p.getStock() > 0)
+                                .orElse(false);
+
+                        if (visible) {
+                            productos.add(new ProductoDTO(
+                                    nombre,
+                                    linea[1].trim(), // descripción
+                                    linea[2].trim(), // precio (string, el front lo normaliza)
+                                    linea[3].trim(), // imagen
+                                    linea[4].trim()  // categoría
+                            ));
+                        }
                     }
                 }
             }
+            return ResponseEntity.ok(productos);
+        } catch (Exception e) {
+            log.error("❌ Error al leer el catálogo desde S3", e);
+            return ResponseEntity.internalServerError().build();
         }
-
-        return ResponseEntity.ok(productos);
-    } catch (Exception e) {
-        log.error("❌ Error al leer el catálogo desde S3", e);
-        return ResponseEntity.internalServerError().build();
     }
-}
-
 
     @Data
     @AllArgsConstructor
@@ -91,14 +89,8 @@ public ResponseEntity<List<ProductoDTO>> obtenerCatalogo() {
     static class ProductoDTO {
         private String nombre;
         private String descripcion;
-        private String precio;
+        private String precio;   // llega como string, el front lo normaliza a número
         private String imagen;
-        private String categoria; // ✅ nuevo campo
-
+        private String categoria;
     }
-    @Data
-    public class PedidoRequestDTO {
-    private String detalle;
-    private double monto;
-}
 }
