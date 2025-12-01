@@ -34,7 +34,7 @@ public class CatalogoController {
     private final TransbankService transbankService;
     private final ProductoStockRepository productoStockRepository;
 
-    private static final String CSV_URL = "https://barlacteo-catalogo.s3.us-east-1.amazonaws.com/catalogo_fronted.csv";
+    private static final String CSV_URL = "https://d2fggeox6a5y4y.cloudfront.net/catalogo_fronted.csv";
 
     @GetMapping("/api/catalogo")
     public ResponseEntity<List<ProductoDTO>> obtenerCatalogo() {
