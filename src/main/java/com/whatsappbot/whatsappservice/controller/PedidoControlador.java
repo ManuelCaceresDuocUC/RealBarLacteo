@@ -141,33 +141,50 @@ public class PedidoControlador {
     }
 
     // === util: parseo de items desde detalle ===
-    private Map<String, Integer> parseItems(String detalle) {
-        Map<String, Integer> map = new LinkedHashMap<>();
-        if (detalle == null || detalle.isBlank()) return map;
-        String[] lines = detalle.split("\\r?\\n");
-        Pattern[] patterns = new Pattern[] {
-            Pattern.compile("^(\\d+)\\s*[xX]\\s*(.+)$"),          // "2 x Nombre"
-            Pattern.compile("^(.+?)\\s*[xX]\\s*(\\d+)$"),         // "Nombre x 2"
-            Pattern.compile("^(.+?)\\s*\\((\\d+)\\)$"),           // "Nombre (2)"
-            Pattern.compile("^-?\\s*(.+?)\\s*[:=]\\s*(\\d+)$")    // "- Nombre: 2"
-        };
-        for (String raw : lines) {
-            String s = raw.trim();
-            if (s.isEmpty()) continue;
-            boolean matched = false;
-            for (Pattern p : patterns) {
-                Matcher m = p.matcher(s);
-                if (m.find()) {
-                    String name = (p.pattern().startsWith("^(")) ? m.group(2).trim() : m.group(1).trim();
-                    int qty = Integer.parseInt((p.pattern().startsWith("^(")) ? m.group(1) : m.group(2));
-                    map.merge(name, qty, Integer::sum);
-                    matched = true; break;
-                }
-            }
-            if (!matched) map.merge(s, 1, Integer::sum);
-        }
-        return map;
+    // === util: parseo de items desde detalle (CORREGIDO) ===
+private Map<String, Integer> parseItems(String detalle) {
+    Map<String, Integer> map = new LinkedHashMap<>();
+    if (detalle == null || detalle.isBlank()) return map;
+
+    // 1. CORRECCIÓN: Detectar si viene separado por comas o saltos de línea
+    String[] lines;
+    if (detalle.contains(",") && !detalle.contains("\n")) {
+        lines = detalle.split(","); // Separar por comas si es una lista plana
+    } else {
+        lines = detalle.split("\\r?\\n"); // Mantener compatibilidad con saltos de línea
     }
+
+    Pattern[] patterns = new Pattern[] {
+        Pattern.compile("^(\\d+)\\s*[xX]\\s*(.+)$"),          // "2 x Nombre"
+        Pattern.compile("^(.+?)\\s*[xX]\\s*(\\d+)$"),         // "Nombre x 2"
+        Pattern.compile("^(.+?)\\s*\\((\\d+)\\)$"),           // "Nombre (2)" (cantidad entre paréntesis)
+        Pattern.compile("^-?\\s*(.+?)\\s*[:=]\\s*(\\d+)$")    // "- Nombre: 2"
+    };
+
+    for (String raw : lines) {
+        String s = raw.trim();
+        if (s.isEmpty()) continue;
+
+        // 2. CORRECCIÓN: Limpiar el precio ($1.800) que viene en el string
+        // Esto borra cualquier cosa que parezca ($...) o ($...) al final
+        s = s.replaceAll("\\s*\\(\\$[\\d.]+\\)", "").trim();
+
+        boolean matched = false;
+        for (Pattern p : patterns) {
+            Matcher m = p.matcher(s);
+            if (m.find()) {
+                String name = (p.pattern().startsWith("^(")) ? m.group(2).trim() : m.group(1).trim();
+                int qty = Integer.parseInt((p.pattern().startsWith("^(")) ? m.group(1) : m.group(2));
+                map.merge(name, qty, Integer::sum);
+                matched = true; 
+                break;
+            }
+        }
+        // Si no coincide con "2 x algo", asume que es "1 x el string limpio"
+        if (!matched) map.merge(s, 1, Integer::sum);
+    }
+    return map;
+}
 
     // ===== Resto de endpoints existentes =====
 
