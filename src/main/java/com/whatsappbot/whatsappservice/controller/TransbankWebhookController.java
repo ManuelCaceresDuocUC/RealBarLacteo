@@ -2,7 +2,6 @@ package com.whatsappbot.whatsappservice.controller;
 
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,23 +12,19 @@ import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.service.ComandaService;
 import com.whatsappbot.whatsappservice.service.PedidoContextService;
 import com.whatsappbot.whatsappservice.service.PedidoService;
-import com.whatsappbot.whatsappservice.service.WhatsAppService;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @RestController
 @RequestMapping("/webpay")
+@RequiredArgsConstructor // Usamos constructor para ser consistentes con los otros controllers
 public class TransbankWebhookController {
 
-    @Autowired
-    private PedidoService pedidoService;
-
-    @Autowired
-    private ComandaService comandaService;
-
-    @Autowired
-    private WhatsAppService whatsAppService;
-
-    @Autowired
-    private PedidoContextService pedidoContext;
+    private final PedidoService pedidoService;
+    private final ComandaService comandaService;
+    private final PedidoContextService pedidoContext;
 
     @PostMapping("/webhook")
     public ResponseEntity<String> recibirWebhookDeTransbank(@RequestBody Map<String, Object> payload) {
@@ -37,25 +32,27 @@ public class TransbankWebhookController {
             String status = (String) payload.get("status");
             String token = (String) payload.get("token");
 
+            log.info("🔔 Webhook recibido de Transbank - Token: {}, Status: {}", token, status);
+
             if (!"AUTHORIZED".equalsIgnoreCase(status)) {
                 return ResponseEntity.badRequest().body("❌ Pago no autorizado");
             }
 
             PedidoEntity pedido = pedidoService.buscarPorToken(token);
             if (pedido == null) {
-                return ResponseEntity.badRequest().body("❌ Pedido no encontrado con token: " + token);
+                log.error("❌ Webhook: Pedido no encontrado con token: {}", token);
+                return ResponseEntity.badRequest().body("❌ Pedido no encontrado");
             }
 
-            // ✅ Actualizar estado
-            pedido.setEstado("pagado");
-            pedidoService.guardarPedido(pedido);
+            // ✅ Actualizar estado si no estaba pagado (evita duplicados)
+            if (!"pagado".equalsIgnoreCase(pedido.getEstado())) {
+                pedido.setEstado("pagado");
+                pedidoService.guardarPedido(pedido);
+                log.info("✅ Pedido {} marcado como pagado via Webhook", pedido.getPedidoId());
+            }
 
             // 📄 Generar comanda
             comandaService.generarPDF(pedido);
-
-            // 📲 Notificar por WhatsApp
-            whatsAppService.enviarMensaje(pedido.getTelefono(),
-                "🎉 ¡Gracias por tu pago! Tu pedido " + pedido.getPedidoId() + " está en preparación.");
 
             // 🧹 Limpiar contexto del cliente
             String telefono = pedido.getTelefono();
@@ -63,10 +60,11 @@ public class TransbankWebhookController {
             pedidoContext.indicacionPreguntadaPorTelefono.remove(telefono);
             pedidoContext.ultimoMensajeProcesadoPorNumero.remove(telefono);
 
-            return ResponseEntity.ok("✅ Pago confirmado, comanda generada y contexto limpiado");
+            return ResponseEntity.ok("✅ Pago procesado exitosamente");
+            
         } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body("❌ Error al procesar notificación de Transbank");
+            log.error("❌ Error en webhook de Transbank", e);
+            return ResponseEntity.internalServerError().body("❌ Error al procesar notificación");
         }
     }
 }

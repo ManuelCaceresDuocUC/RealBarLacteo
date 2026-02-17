@@ -1,25 +1,33 @@
 package com.whatsappbot.whatsappservice.controller;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.LinkedHashMap;
-import java.util.regex.Pattern;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.whatsappbot.whatsappservice.dto.PagoResponseDTO;
 import com.whatsappbot.whatsappservice.model.PedidoEntity;
 import com.whatsappbot.whatsappservice.repository.PedidoRepository;
 import com.whatsappbot.whatsappservice.service.ComandaService;
 import com.whatsappbot.whatsappservice.service.PedidoContextService;
-import com.whatsappbot.whatsappservice.service.TransbankService;
-import com.whatsappbot.whatsappservice.service.WatiService;
 import com.whatsappbot.whatsappservice.service.StockService;
+import com.whatsappbot.whatsappservice.service.TransbankService;
 
 import cl.transbank.webpay.webpayplus.responses.WebpayPlusTransactionCommitResponse;
 import lombok.RequiredArgsConstructor;
@@ -33,10 +41,9 @@ public class PedidoControlador {
 
     private final PedidoRepository pedidoRepository;
     private final TransbankService transbankService;
-    private final WatiService watiService;
     private final ComandaService comandaService;
     private final PedidoContextService pedidoContext;
-    private final StockService stockService; // nuevo
+    private final StockService stockService;
 
     @PostMapping
     public ResponseEntity<?> crearPedido(@RequestBody Map<String, String> payload) {
@@ -69,7 +76,7 @@ public class PedidoControlador {
             pedidoRepository.save(pedido);
 
             return ResponseEntity.ok(Map.of(
-                "mensaje", "Pedido creado y link enviado por WhatsApp",
+                "mensaje", "Pedido creado",
                 "pedidoId", pedidoId,
                 "linkPago", pago.getUrl()
             ));
@@ -99,7 +106,6 @@ public class PedidoControlador {
                 return "error";
             }
 
-            // Idempotencia: no descontar dos veces ni regenerar si ya está pagado
             if (!"pagado".equalsIgnoreCase(pedido.getEstado())) {
                 var items = parseItems(pedido.getDetalle());
                 for (var e : items.entrySet()) {
@@ -112,11 +118,8 @@ public class PedidoControlador {
             String urlComanda = comandaService.generarPDF(pedido);
             log.info("🔗 URL comanda generada: {}", urlComanda);
 
-            if (urlComanda != null) {
-                watiService.enviarMensajeConTemplate(pedido.getTelefono(), pedido.getPedidoId(), urlComanda);
-            } else {
-                log.warn("⚠️ Comanda no pudo ser subida. Se enviará confirmación sin link.");
-                watiService.enviarTemplateConfirmacionSimple(pedido.getTelefono(), "Cliente");
+            if (urlComanda == null) {
+                log.warn("⚠️ Comanda no pudo ser generada/subida.");
             }
 
             pedidoContext.pedidoTemporalPorTelefono.remove(pedido.getTelefono());
@@ -125,6 +128,7 @@ public class PedidoControlador {
 
             log.info("✅ Pago confirmado para pedido {}", buyOrder);
             return "redirect:" + (urlComanda != null ? urlComanda : "/");
+
         } catch (org.springframework.dao.OptimisticLockingFailureException e) {
             log.error("⚠️ Colisión de stock. Otro pedido tomó el stock primero.", e);
             model.addAttribute("mensaje", "Stock agotado durante el proceso.");
@@ -140,53 +144,44 @@ public class PedidoControlador {
         }
     }
 
-    // === util: parseo de items desde detalle ===
-    // === util: parseo de items desde detalle (CORREGIDO) ===
-private Map<String, Integer> parseItems(String detalle) {
-    Map<String, Integer> map = new LinkedHashMap<>();
-    if (detalle == null || detalle.isBlank()) return map;
+    private Map<String, Integer> parseItems(String detalle) {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        if (detalle == null || detalle.isBlank()) return map;
 
-    // 1. CORRECCIÓN: Detectar si viene separado por comas o saltos de línea
-    String[] lines;
-    if (detalle.contains(",") && !detalle.contains("\n")) {
-        lines = detalle.split(","); // Separar por comas si es una lista plana
-    } else {
-        lines = detalle.split("\\r?\\n"); // Mantener compatibilidad con saltos de línea
-    }
-
-    Pattern[] patterns = new Pattern[] {
-        Pattern.compile("^(\\d+)\\s*[xX]\\s*(.+)$"),          // "2 x Nombre"
-        Pattern.compile("^(.+?)\\s*[xX]\\s*(\\d+)$"),         // "Nombre x 2"
-        Pattern.compile("^(.+?)\\s*\\((\\d+)\\)$"),           // "Nombre (2)" (cantidad entre paréntesis)
-        Pattern.compile("^-?\\s*(.+?)\\s*[:=]\\s*(\\d+)$")    // "- Nombre: 2"
-    };
-
-    for (String raw : lines) {
-        String s = raw.trim();
-        if (s.isEmpty()) continue;
-
-        // 2. CORRECCIÓN: Limpiar el precio ($1.800) que viene en el string
-        // Esto borra cualquier cosa que parezca ($...) o ($...) al final
-        s = s.replaceAll("\\s*\\(\\$[\\d.]+\\)", "").trim();
-
-        boolean matched = false;
-        for (Pattern p : patterns) {
-            Matcher m = p.matcher(s);
-            if (m.find()) {
-                String name = (p.pattern().startsWith("^(")) ? m.group(2).trim() : m.group(1).trim();
-                int qty = Integer.parseInt((p.pattern().startsWith("^(")) ? m.group(1) : m.group(2));
-                map.merge(name, qty, Integer::sum);
-                matched = true; 
-                break;
-            }
+        String[] lines;
+        if (detalle.contains(",") && !detalle.contains("\n")) {
+            lines = detalle.split(",");
+        } else {
+            lines = detalle.split("\\r?\\n");
         }
-        // Si no coincide con "2 x algo", asume que es "1 x el string limpio"
-        if (!matched) map.merge(s, 1, Integer::sum);
-    }
-    return map;
-}
 
-    // ===== Resto de endpoints existentes =====
+        Pattern[] patterns = new Pattern[] {
+            Pattern.compile("^(\\d+)\\s*[xX]\\s*(.+)$"),
+            Pattern.compile("^(.+?)\\s*[xX]\\s*(\\d+)$"),
+            Pattern.compile("^(.+?)\\s*\\((\\d+)\\)$"),
+            Pattern.compile("^-?\\s*(.+?)\\s*[:=]\\s*(\\d+)$")
+        };
+
+        for (String raw : lines) {
+            String s = raw.trim();
+            if (s.isEmpty()) continue;
+            s = s.replaceAll("\\s*\\(\\$[\\d.]+\\)", "").trim();
+
+            boolean matched = false;
+            for (Pattern p : patterns) {
+                Matcher m = p.matcher(s);
+                if (m.find()) {
+                    String name = (p.pattern().startsWith("^(")) ? m.group(2).trim() : m.group(1).trim();
+                    int qty = Integer.parseInt((p.pattern().startsWith("^(")) ? m.group(1) : m.group(2));
+                    map.merge(name, qty, Integer::sum);
+                    matched = true; 
+                    break;
+                }
+            }
+            if (!matched) map.merge(s, 1, Integer::sum);
+        }
+        return map;
+    }
 
     @GetMapping("/ultimo-pedido-id")
     public ResponseEntity<?> obtenerUltimoPedidoId() {
